@@ -56,7 +56,8 @@ for run in runs:
     start_date = run.get("start_date_local", "")
     date_str = parser.isoparse(start_date).strftime("%Y-%m-%d_%H-%M")
 
-    filename = f"{clean_filename(name)}_{date_str}_streams.csv"
+    filename = f"{date_str}_streams.csv"
+    # filename = f"{clean_filename(name)}_{date_str}_streams.csv"
     filepath = os.path.join(output_folder, filename)
 
     # Request multiple streams at once
