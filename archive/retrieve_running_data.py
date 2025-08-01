@@ -1,3 +1,6 @@
+"""
+This file retrieves running data from Strava API
+"""
 from requests_oauthlib import OAuth2Session
 from dotenv import load_dotenv
 import os
@@ -63,7 +66,7 @@ for run in runs:
     os.makedirs(output_folder+"/"+run_folder, exist_ok=True)
 
     ## Create a JSON file
-    json_filename = f"{date_str}.json"
+    json_filename = f"{date_str}_overall.json"
     json_filepath = os.path.join(output_folder+"/"+run_folder, json_filename)
 
     with open(json_filepath, "w", encoding="utf-8") as f:
