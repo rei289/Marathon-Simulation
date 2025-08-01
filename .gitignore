@@ -3,3 +3,4 @@ app_icon.png
 .env
 /run_data
 /data
+__pycache__/

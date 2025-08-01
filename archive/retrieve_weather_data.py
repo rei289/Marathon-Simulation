@@ -7,12 +7,13 @@ import time
 import os
 import json
 from dotenv import load_dotenv
+
 load_dotenv()
 
 def get_weather_openweather(name: str, lat: float, lon: float, iso_datetime: str, api_key: str):
     # Convert ISO datetime to Unix timestamp
     dt = datetime.fromisoformat(iso_datetime.replace("Z", "+00:00"))
-    # date_str = dt.strftime("%Y-%m-%d")
+    # date_str = dt.strftime("%Y-%m-%dT%H:00:00")
     unix_time = int(dt.timestamp())
 
     base_url = "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"
@@ -36,8 +37,15 @@ def get_weather_openweather(name: str, lat: float, lon: float, iso_datetime: str
     # convert json format data into
     # python format data
     x = response.json()
+    # get the weather data for that specific hour
+    
+    # Create a JSON file
+    json_filename = f"test_overall.json"
 
-    print(x)
+    with open(json_filename, "w", encoding="utf-8") as f:
+        json.dump(x, f, indent=2)
+
+    # json.dumps(x, indent=4)
 
 # loop through the folder in which the weather data is stored
 folder_path = "data"
@@ -62,3 +70,5 @@ for folder_name in os.listdir(folder_path):
                 continue
                 
             get_weather_openweather(folder_name, lat, lon, iso_datetime, api_key)
+            break
+    break
