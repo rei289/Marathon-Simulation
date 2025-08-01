@@ -1,6 +1,6 @@
 venv/
 app_icon.png
 .env
-/run_data
 /data
 __pycache__/
+/archive

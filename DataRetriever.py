@@ -1,8 +1,8 @@
 """
 This is the main file for retrieving Strava and Visual Crossing data for marathon simulations.
 """
-from strava_data_retriever import StravaDataRetriever
-from visual_crossing_data_retriever import VisualCrossingDataRetriever
+from API.Strava import StravaDataRetriever
+from API.VisualCrossing import VisualCrossingDataRetriever
 import json
 import csv
 import os
@@ -110,4 +110,6 @@ def main(num_runs: int = 10, output_folder: str = "data"):
 
 
 if __name__ == "__main__":
-    main()
+    num_runs = 10
+    output_folder = "data"
+    main(num_runs, output_folder)

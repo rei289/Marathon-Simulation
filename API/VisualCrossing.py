@@ -1,11 +1,12 @@
 """
-This file retrieves weather data from OpenWeather API
+Structured Visual Crossing Data Retriever
+
+This module provides a class-based approach to retrieve and save weather data from Visual Crossing API.
+It organizes the functionality into logical components for better maintainability and reusability.
 """
 import requests
 from datetime import datetime
-import time
 import os
-import json
 from dotenv import load_dotenv
 from typing import Dict, Any
 

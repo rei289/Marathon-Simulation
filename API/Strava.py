@@ -8,8 +8,6 @@ It organizes the functionality into logical components for better maintainabilit
 from requests_oauthlib import OAuth2Session
 from dotenv import load_dotenv
 import os
-import json
-import csv
 from dateutil import parser
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -114,37 +112,6 @@ class StravaDataRetriever:
         """Convert start date to formatted string."""
         return parser.isoparse(start_date).strftime("%Y-%m-%d_%H-%M")
     
-    # def _setup_output_directory(self, date_str: str) -> str:
-    #     """
-    #     Create output directory structure.
-        
-    #     Args:
-    #         date_str (str): Date string for folder name
-            
-    #     Returns:
-    #         str: Path to the run-specific folder
-    #     """
-    #     os.makedirs(self.output_folder, exist_ok=True)
-    #     run_folder_path = os.path.join(self.output_folder, date_str)
-    #     os.makedirs(run_folder_path, exist_ok=True)
-    #     return run_folder_path
-    
-    # def save_run_overview(self, run: Dict[str, Any], run_folder_path: str, date_str: str) -> None:
-    #     """
-    #     Save run overview data as JSON.
-        
-    #     Args:
-    #         run (Dict[str, Any]): Run data
-    #         run_folder_path (str): Path to run folder
-    #         date_str (str): Date string for filename
-    #     """
-    #     json_filename = f"{date_str}_overall.json"
-    #     json_filepath = os.path.join(run_folder_path, json_filename)
-        
-    #     with open(json_filepath, "w", encoding="utf-8") as f:
-    #         json.dump(run, f, indent=2)
-        
-    #     print(f"✅ Saved overview: {json_filename}")
     
     def fetch_activity_streams(self, run_id: int) -> Dict[str, Any]:
         """
@@ -191,74 +158,6 @@ class StravaDataRetriever:
                 lat.append(None)
                 lng.append(None)
         return lat, lng
-    
-    # def save_run_streams(self, run: Dict[str, Any], run_folder_path: str, date_str: str) -> bool:
-    #     """
-    #     Save detailed stream data as CSV.
-        
-    #     Args:
-    #         run (Dict[str, Any]): Run data
-    #         run_folder_path (str): Path to run folder
-    #         date_str (str): Date string for filename
-            
-    #     Returns:
-    #         bool: True if successful, False if no data available
-    #     """
-    #     run_id = run["id"]
-    #     name = run.get("name", "Unnamed_run")
-        
-    #     # Fetch stream data
-    #     streams = self.fetch_activity_streams(run_id)
-        
-    #     # Extract stream data with defaults
-    #     time_data = streams.get("time", {}).get("data", [])
-    #     if not time_data:
-    #         print(f"⚠️ No time stream data for run '{name}' ({run_id}), skipping streams.")
-    #         return False
-        
-    #     # Extract all stream types
-    #     stream_data = {
-    #         'heartrate': streams.get("heartrate", {}).get("data", []),
-    #         'distance': streams.get("distance", {}).get("data", []),
-    #         'cadence': streams.get("cadence", {}).get("data", []),
-    #         'altitude': streams.get("altitude", {}).get("data", []),
-    #         'watts': streams.get("watts", {}).get("data", []),
-    #         'temp': streams.get("temp", {}).get("data", []),
-    #         'velocity': streams.get("velocity_smooth", {}).get("data", []),
-    #         'grade': streams.get("grade_smooth", {}).get("data", []),
-    #         'moving': streams.get("moving", {}).get("data", []),
-    #         'latlng': streams.get("latlng", {}).get("data", [])
-    #     }
-        
-    #     # Pad all lists to match time_data length
-    #     max_len = len(time_data)
-    #     for key in stream_data:
-    #         stream_data[key] = self._pad_list(stream_data[key], max_len)
-        
-    #     # Extract coordinates
-    #     lat, lng = self._extract_coordinates(stream_data['latlng'])
-        
-    #     # Save to CSV
-    #     csv_filename = f"{date_str}_streams.csv"
-    #     csv_filepath = os.path.join(run_folder_path, csv_filename)
-        
-    #     with open(csv_filepath, "w", newline="", encoding="utf-8") as csvfile:
-    #         writer = csv.writer(csvfile)
-    #         writer.writerow([
-    #             "time_s", "heartrate_bpm", "cadence_rpm", "distance_m", "altitude_m", "watts",
-    #             "temp_c", "velocity_mps", "grade_percent", "moving", "latitude", "longitude"
-    #         ])
-            
-    #         for row in zip(
-    #             time_data, stream_data['heartrate'], stream_data['cadence'], 
-    #             stream_data['distance'], stream_data['altitude'], stream_data['watts'], 
-    #             stream_data['temp'], stream_data['velocity'], stream_data['grade'], 
-    #             stream_data['moving'], lat, lng
-    #         ):
-    #             writer.writerow(row)
-        
-    #     print(f"✅ Saved streams for '{name}' to {csv_filename}")
-    #     return True
     
     def parse_to_csv(self, run: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -343,8 +242,8 @@ class StravaDataRetriever:
 
             # elevations
             "total_elevation_gain": run.get("total_elevation_gain"),
-            "elevation_high": run.get("elevation_high"),
-            "elevation_low": run.get("elevation_low"),
+            # "elevation_high": run.get("elevation_high"),
+            # "elevation_low": run.get("elevation_low"),
             "start_latlng": run.get("start_latlng"),
             "end_latlng": run.get("end_latlng"),
 
@@ -352,70 +251,9 @@ class StravaDataRetriever:
             "average_speed": run.get("average_speed"),
             "max_speed": run.get("max_speed"),
             "average_cadence": run.get("average_cadence"),
+
+            # other
+            "calories": run.get("calories"),
         }
         
         return json_data
-    
-    # def process_run(self, run: Dict[str, Any]) -> None:
-    #     """
-    #     Process a single run: save overview and streams data.
-        
-    #     Args:
-    #         run (Dict[str, Any]): Run data from Strava
-    #     """
-    #     name = run.get("name", "Unnamed_run")
-    #     start_date = run.get("start_date_local", "")
-    #     date_str = self._create_date_string(start_date)
-        
-    #     # Setup directory
-    #     run_folder_path = self._setup_output_directory(date_str)
-        
-    #     # Save overview data
-    #     self.save_run_overview(run, run_folder_path, date_str)
-        
-    #     # Save streams data
-    #     self.save_run_streams(run, run_folder_path, date_str)
-    
-    # def retrieve_and_save_runs(self, num_runs: int = 10) -> None:
-    #     """
-    #     Main method to retrieve and save running data.
-        
-    #     Args:
-    #         num_runs (int): Number of recent runs to process
-    #     """
-    #     try:
-    #         # Authenticate
-    #         self.authenticate()
-            
-    #         # Fetch activities
-    #         activities = self.fetch_activities()
-            
-    #         # Filter runs
-    #         runs = self.filter_runs(activities, limit=num_runs)
-            
-    #         # Setup output folder
-    #         print(f"\n📁 Saving data to folder: {self.output_folder}\n")
-            
-    #         # Process each run
-    #         for i, run in enumerate(runs, 1):
-    #             print(f"\n--- Processing run {i}/{len(runs)} ---")
-    #             self.process_run(run)
-            
-    #         print("\n✅ Done saving all running data!")
-            
-    #     except Exception as e:
-    #         print(f"❌ Error: {e}")
-    #         raise
-
-
-# def main():
-#     """Main function to run the data retrieval process."""
-#     # You can customize the output folder here
-#     retriever = StravaDataRetriever(output_folder="data")
-    
-#     # Retrieve and save the 10 most recent runs
-#     retriever.retrieve_and_save_runs(num_runs=10)
-
-
-# if __name__ == "__main__":
-#     main()
