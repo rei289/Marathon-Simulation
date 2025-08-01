@@ -1,6 +1,7 @@
 from requests_oauthlib import OAuth2Session
 from dotenv import load_dotenv
 import os
+import json
 import csv
 import re
 from dateutil import parser
@@ -41,7 +42,8 @@ activities = response.json()
 runs = [act for act in activities if act.get("type") == "Run"][:10]
 
 # === Create output folder ===
-output_folder = "run_data"
+output_folder = "data"
+# output_folder = "run_data"
 os.makedirs(output_folder, exist_ok=True)
 
 print(f"\n📁 Saving data to folder: {output_folder}\n")
@@ -49,16 +51,30 @@ print(f"\n📁 Saving data to folder: {output_folder}\n")
 def clean_filename(s):
     return re.sub(r"[^\w\-_\. ]", "_", s)
 
-# === Save each run as a JSON file ===
+# === Save each run in 2 files, JSON and CSV file
 for run in runs:
     run_id = run["id"]
     name = run.get("name", "Unnamed_run")
     start_date = run.get("start_date_local", "")
     date_str = parser.isoparse(start_date).strftime("%Y-%m-%d_%H-%M")
 
-    filename = f"{date_str}_streams.csv"
+    ## create a folder under output_folder for each
+    run_folder = f"{date_str}"
+    os.makedirs(output_folder+"/"+run_folder, exist_ok=True)
+
+    ## Create a JSON file
+    json_filename = f"{date_str}.json"
+    json_filepath = os.path.join(output_folder+"/"+run_folder, json_filename)
+
+    with open(json_filepath, "w", encoding="utf-8") as f:
+        json.dump(run, f, indent=2)
+
+    print(f"✅ Saved: {json_filename}")
+
+    ## Create CSV file
+    csv_filename = f"{date_str}_streams.csv"
     # filename = f"{clean_filename(name)}_{date_str}_streams.csv"
-    filepath = os.path.join(output_folder, filename)
+    csv_filepath = os.path.join(output_folder+"/"+run_folder, csv_filename)
 
     # Request multiple streams at once
     streams_url = f"https://www.strava.com/api/v3/activities/{run_id}/streams"
@@ -116,7 +132,7 @@ for run in runs:
             lng.append(None)
 
     # Save to CSV
-    with open(filepath, "w", newline="", encoding="utf-8") as csvfile:
+    with open(csv_filepath, "w", newline="", encoding="utf-8") as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow([
             "time_s", "heartrate_bpm", "cadence_rpm", "distance_m", "altitude_m", "watts",
@@ -126,6 +142,6 @@ for run in runs:
         for row in zip(time_data, heartrate, cadence, distance, altitude, watts, temp, velocity, grade, moving, lat, lng):
             writer.writerow(row)
 
-    print(f"Saved streams for '{name}' to {filepath}")
+    print(f"Saved streams for '{name}' to {csv_filepath}")
 
 print("✅ Done saving all streams data!")
