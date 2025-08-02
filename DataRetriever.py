@@ -3,6 +3,7 @@ This is the main file for retrieving Strava and Visual Crossing data for maratho
 """
 from API.Strava import StravaDataRetriever
 from API.VisualCrossing import VisualCrossingDataRetriever
+from utilis.helper import extract_global_json
 import json
 import csv
 import os
@@ -110,6 +111,8 @@ def main(num_runs: int = 10, output_folder: str = "data"):
 
 
 if __name__ == "__main__":
-    num_runs = 10
-    output_folder = "data"
+    # Load configuration from globals.json
+    num_runs = extract_global_json("num_runs")
+    output_folder = extract_global_json("output_folder")
+    # Run the main function
     main(num_runs, output_folder)
