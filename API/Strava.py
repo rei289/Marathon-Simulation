@@ -242,8 +242,8 @@ class StravaDataRetriever:
 
             # elevations
             "total_elevation_gain": run.get("total_elevation_gain"),
-            # "elevation_high": run.get("elevation_high"),
-            # "elevation_low": run.get("elevation_low"),
+            "elevation_high": run.get("elevation_high"),
+            "elevation_low": run.get("elevation_low"),
             "start_latlng": run.get("start_latlng"),
             "end_latlng": run.get("end_latlng"),
 
@@ -252,6 +252,9 @@ class StravaDataRetriever:
             "max_speed": run.get("max_speed"),
             "average_cadence": run.get("average_cadence"),
 
+            # heart rate
+            "average_heartrate": run.get("average_heartrate"),
+            "max_heartrate": run.get("max_heartrate"),
             # other
             "calories": run.get("calories"),
         }

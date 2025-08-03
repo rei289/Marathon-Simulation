@@ -1,6 +1,7 @@
 from requests_oauthlib import OAuth2Session
 from dotenv import load_dotenv
 import os
+import pprint
 import json
 
 # === Load credentials ===
@@ -44,16 +45,26 @@ runs = [act for act in activities if act.get("type") == "Run"][:10]
 
 print(f"\n🏃 Found {len(runs)} recent runs:\n")
 
+# just look at the first run
 for i, run in enumerate(runs, 1):
     name = run["name"]
-    distance_km = run["distance"] / 1000  # meters to km
-    moving_time = run["moving_time"] / 60  # seconds to minutes
-    pace = (run["moving_time"] / 60) / distance_km if distance_km else 0
-    date = run["start_date_local"]
+    # distance_km = run["distance"] / 1000  # meters to km
+    # moving_time = run["moving_time"] / 60  # seconds to minutes
+    # pace = (run["moving_time"] / 60) / distance_km if distance_km else 0
+    # date = run["start_date_local"]
 
     print(f"{i}. {name}")
-    print(f"   📅 Date       : {date}")
-    print(f"   📏 Distance   : {distance_km:.2f} km")
-    print(f"   ⏱️ Time        : {moving_time:.1f} min")
-    print(f"   🐾 Avg Pace   : {pace:.2f} min/km")
+    
+    # save into json file
+    json_filename = f"run_{i}.json"
+    with open(json_filename, 'w') as f:
+        json.dump(run, f, indent=4)
+
+    # pprint.pprint(run)
+    # print(f"   📅 Date       : {date}")
+    # print(f"   📏 Distance   : {distance_km:.2f} km")
+    # print(f"   ⏱️ Time        : {moving_time:.1f} min")
+    # print(f"   🐾 Avg Pace   : {pace:.2f} min/km")
+    # print(f"     Start LatLng: {run['start_latlng'] if 'start_latlng' in run else 'N/A'}")
     print("-" * 40)
+    break

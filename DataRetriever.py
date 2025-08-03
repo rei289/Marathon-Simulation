@@ -8,6 +8,7 @@ import json
 import csv
 import os
 from dateutil import parser
+import pprint
 
 
 def save_to_json(data: dict, folder_path: str, filename: str) -> None:
@@ -54,7 +55,6 @@ def save_to_csv(data: dict, folder_path: str, filename: str) -> None:
 
     print(f"✅ Saved streams to {filename}")
 
-
 def main(num_runs: int = 10, output_folder: str = "data"):
     """
     Main function to retrieve data from Strava and Visual Crossing.
@@ -90,6 +90,9 @@ def main(num_runs: int = 10, output_folder: str = "data"):
         run_folder = f"{date_str}"
         os.makedirs(output_folder+"/"+run_folder, exist_ok=True)
 
+        # check this run data to make sure all its componets are present
+
+
         # csv file data
         csv_data = strava_retriever.parse_to_csv(run)
 
@@ -98,6 +101,7 @@ def main(num_runs: int = 10, output_folder: str = "data"):
 
         # now we want to retrieve the weather data for this run
         json_data['weather'] = visual_crossing_retriever.get_weather_openweather(json_data)
+
 
         # Save to JSON
         json_filename = f"{date_str}_overall.json"
