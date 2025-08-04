@@ -222,41 +222,82 @@ class StravaDataRetriever:
         Returns:
             Dict[str, Any]: JSON formatted run data
         """
+        # Extract basic run information
+        activity_id = run.get("id")
+        # Fetch detailed activity data (resource state 3)
+        detailed_url = f"https://www.strava.com/api/v3/activities/{activity_id}"
+        detailed_response = self.session.get(detailed_url)
+        detailed_run = detailed_response.json()
         # Extract relevant fields for JSON
         json_data = {
             # basic run information
-            "id": run.get("id"),
-            "name": run.get("name"),
-            "type": run.get("type"),
+            "id": detailed_run.get("id"),
+            "name": detailed_run.get("name"),
+            "type": detailed_run.get("type"),
 
             # time information
-            "start_date": run.get("start_date"),
-            "start_date_local": run.get("start_date_local"),
-            "timezone": run.get("timezone"),
-            "utc_offset": run.get("utc_offset"),
+            "start_date": detailed_run.get("start_date"),
+            "start_date_local": detailed_run.get("start_date_local"),
+            "timezone": detailed_run.get("timezone"),
+            "utc_offset": detailed_run.get("utc_offset"),
 
             # run statistics
-            "distance": run.get("distance"),
-            "moving_time": run.get("moving_time"),
-            "elapsed_time": run.get("elapsed_time"),
+            "distance": detailed_run.get("distance"),
+            "moving_time": detailed_run.get("moving_time"),
+            "elapsed_time": detailed_run.get("elapsed_time"),
 
             # elevations
-            "total_elevation_gain": run.get("total_elevation_gain"),
-            "elevation_high": run.get("elevation_high"),
-            "elevation_low": run.get("elevation_low"),
-            "start_latlng": run.get("start_latlng"),
-            "end_latlng": run.get("end_latlng"),
+            "total_elevation_gain": detailed_run.get("total_elevation_gain"),
+            "elev_high": detailed_run.get("elev_high"),
+            "elev_low": detailed_run.get("elev_low"),
+            "start_latlng": detailed_run.get("start_latlng"),
+            "end_latlng": detailed_run.get("end_latlng"),
 
             # pace and speed
-            "average_speed": run.get("average_speed"),
-            "max_speed": run.get("max_speed"),
-            "average_cadence": run.get("average_cadence"),
+            "average_speed": detailed_run.get("average_speed"),
+            "max_speed": detailed_run.get("max_speed"),
+            "average_cadence": detailed_run.get("average_cadence"),
 
             # heart rate
-            "average_heartrate": run.get("average_heartrate"),
-            "max_heartrate": run.get("max_heartrate"),
+            "average_heartrate": detailed_run.get("average_heartrate"),
+            "max_heartrate": detailed_run.get("max_heartrate"),
             # other
-            "calories": run.get("calories"),
+            "calories": detailed_run.get("calories"),
         }
+        # json_data = {
+        #     # basic run information
+        #     "id": run.get("id"),
+        #     "name": run.get("name"),
+        #     "type": run.get("type"),
+
+        #     # time information
+        #     "start_date": run.get("start_date"),
+        #     "start_date_local": run.get("start_date_local"),
+        #     "timezone": run.get("timezone"),
+        #     "utc_offset": run.get("utc_offset"),
+
+        #     # run statistics
+        #     "distance": run.get("distance"),
+        #     "moving_time": run.get("moving_time"),
+        #     "elapsed_time": run.get("elapsed_time"),
+
+        #     # elevations
+        #     "total_elevation_gain": run.get("total_elevation_gain"),
+        #     "elev_high": run.get("elev_high"),
+        #     "elev_low": run.get("elev_low"),
+        #     "start_latlng": run.get("start_latlng"),
+        #     "end_latlng": run.get("end_latlng"),
+
+        #     # pace and speed
+        #     "average_speed": run.get("average_speed"),
+        #     "max_speed": run.get("max_speed"),
+        #     "average_cadence": run.get("average_cadence"),
+
+        #     # heart rate
+        #     "average_heartrate": run.get("average_heartrate"),
+        #     "max_heartrate": run.get("max_heartrate"),
+        #     # other
+        #     "calories": run.get("calories"),
+        # }
         
         return json_data
