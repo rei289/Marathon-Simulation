@@ -3,7 +3,8 @@ This file contains utility functions for saving data to JSON and CSV formats.
 """
 import json
 from typing import Any, Dict
-
+import sys
+import os
 
 def extract_global_json(var_name: str) -> Any:
     """

@@ -102,6 +102,8 @@ def main(num_runs: int = 10, output_folder: str = "data"):
         # now we want to retrieve the weather data for this run
         json_data['weather'] = visual_crossing_retriever.get_weather_openweather(json_data)
 
+        # perform feature engineering on the csv dataset
+        
 
         # Save to JSON
         json_filename = f"{date_str}_overall.json"
