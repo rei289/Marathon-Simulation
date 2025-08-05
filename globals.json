@@ -1,4 +1,4 @@
 {
-    "output_folder": "data",
-    "num_runs": 10
+    "output_folder": "runs",
+    "num_runs": 1
 }
