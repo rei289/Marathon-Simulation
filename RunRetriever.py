@@ -3,12 +3,12 @@ This is the main file for retrieving Strava and Visual Crossing data for maratho
 """
 from API.Strava import StravaDataRetriever
 from API.VisualCrossing import VisualCrossingDataRetriever
+from DataScience.ProcessData import DataProcessor
 from utilis.helper import extract_global_json
 import json
 import csv
 import os
 from dateutil import parser
-import pprint
 
 
 def save_to_json(data: dict, folder_path: str, filename: str) -> None:
@@ -36,7 +36,8 @@ def save_to_csv(data: dict, folder_path: str, filename: str) -> None:
             "grade_percent",
             "moving",
             "latitude",
-            "longitude"
+            "longitude",
+            "is_original"
         ])
         
         for row in zip(
@@ -49,7 +50,8 @@ def save_to_csv(data: dict, folder_path: str, filename: str) -> None:
             data['grade'],
             data['moving'],
             data["latitude"],
-            data["longitude"]
+            data["longitude"],
+            data["is_original"]
         ):
             writer.writerow(row)
 
@@ -102,16 +104,23 @@ def main(num_runs: int = 10, output_folder: str = "data"):
         # now we want to retrieve the weather data for this run
         json_data['weather'] = visual_crossing_retriever.get_weather_openweather(json_data)
 
-        # perform feature engineering on the csv dataset
-        
+        # CLEAN UP DATA AND PERFORM FEATURE ENGINEERING HERE
+        data_processor = DataProcessor(csv_data, json_data)
+        # clean the data
+        data_processor.interpolate_missing_data()
+
+        # perform feature engineering
+        data_processor.feature_engineering()
 
         # Save to JSON
         json_filename = f"{date_str}_overall.json"
-        save_to_json(json_data, os.path.join(output_folder, run_folder), json_filename)
+        data_processor.save_to_json(os.path.join(output_folder, run_folder), json_filename)
+        # save_to_json(json_data, os.path.join(output_folder, run_folder), json_filename)
 
         # Save to CSV
         csv_filename = f"{date_str}_streams.csv"
-        save_to_csv(csv_data, os.path.join(output_folder, run_folder), csv_filename)
+        data_processor.save_to_csv(os.path.join(output_folder, run_folder), csv_filename)
+        # save_to_csv(csv_data, os.path.join(output_folder, run_folder), csv_filename)
 
     print("\n✅ Done saving all running data!")
 
