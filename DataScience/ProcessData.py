@@ -15,6 +15,7 @@ class DataProcessor:
     def __init__(self, csv_data: dict, json_data: dict):
         # we first convert dictionary to pandas DataFrame
         self.csv_data = pd.DataFrame(csv_data)
+        # self.csv_data = pd.DataFrame(csv_data).fillna(0)  # Fill NaN values with 0
         self.json_data = json_data
         self.rename_columns()
 

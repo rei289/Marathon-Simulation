@@ -10,53 +10,6 @@ import csv
 import os
 from dateutil import parser
 
-
-def save_to_json(data: dict, folder_path: str, filename: str) -> None:
-    """
-    Save data to a JSON file.
-    """
-    with open(os.path.join(folder_path, filename), 'w') as f:
-        json.dump(data, f, indent=4)
-
-    print(f"✅ Saved streams to {filename}")
-
-def save_to_csv(data: dict, folder_path: str, filename: str) -> None:
-    """
-    Save data to a CSV file.
-    """
-    with open(os.path.join(folder_path, filename), "w", newline="", encoding="utf-8") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow([
-            "time_s", 
-            "heartrate_bpm",
-            "cadence_rpm", 
-            "distance_m", 
-            "altitude_m",
-            "velocity_mps",
-            "grade_percent",
-            "moving",
-            "latitude",
-            "longitude",
-            "is_original"
-        ])
-        
-        for row in zip(
-            data["time"],
-            data['heartrate'],
-            data['cadence'],
-            data['distance'],
-            data['altitude'],
-            data['velocity'],
-            data['grade'],
-            data['moving'],
-            data["latitude"],
-            data["longitude"],
-            data["is_original"]
-        ):
-            writer.writerow(row)
-
-    print(f"✅ Saved streams to {filename}")
-
 def main(num_runs: int = 10, output_folder: str = "data"):
     """
     Main function to retrieve data from Strava and Visual Crossing.
