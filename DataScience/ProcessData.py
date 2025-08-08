@@ -163,8 +163,9 @@ class DataProcessor:
         # --------------------------- PACE EFFICIENCY ---------------------------
         # data["pace_efficiency"] = data["velocity_mps"] / (data["heartrate_bpm"] / 60)  # m/s per bpm
         # resting heart rate
-        self.csv_data["pace_efficiency"] = (self.csv_data[vel] / self.json_data["max_speed"]) * (1 - (self.csv_data[hr] - (resting_heart_rate/60)) / (self.json_data["max_heartrate"]/60))
-        self.csv_data["diff_pace_efficiency"] = self.csv_data["pace_efficiency"].diff()  # Change in pace efficiency
+        self.csv_data["smooth_pace_efficiency"] = (self.csv_data[vel] / self.json_data["max_speed"]) * (1 - (self.csv_data[hr] - (resting_heart_rate/60)) / (self.json_data["max_heartrate"]/60))
+        self.csv_data["pace_efficiency"] = (self.csv_data["velocity_mps"] / self.json_data["max_speed"]) * (1 - (self.csv_data["heartrate_bps"] - (resting_heart_rate/60)) / (self.json_data["max_heartrate"]/60))
+        self.csv_data["diff_pace_efficiency"] = self.csv_data["smooth_pace_efficiency"].diff()  # Change in pace efficiency
 
         # --------------------------- DIFF HEART RATE ---------------------------
         self.csv_data["diff_heartrate_bps2"] = self.csv_data[hr].diff()  # Change in heart rate
