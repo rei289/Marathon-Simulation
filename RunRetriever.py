@@ -59,11 +59,15 @@ def main(num_runs: int = 10, output_folder: str = "data"):
 
         # CLEAN UP DATA AND PERFORM FEATURE ENGINEERING HERE
         data_processor = DataProcessor(csv_data, json_data)
-        # clean the data
-        data_processor.interpolate_missing_data()
+        # clean and perform feature engineering
+        data_processor.process()
+        # # clean the data
+        # data_processor.interpolate_missing_data()
+        # data_processor.unit_conversion()  # Convert per minute to per second
+        # data_processor.smooth_data(window_size=10)  # Smooth the data
 
-        # perform feature engineering
-        data_processor.feature_engineering()
+        # # perform feature engineering
+        # data_processor.feature_engineering(resting_heart_rate=60)
 
         # Save to JSON
         json_filename = f"{date_str}_overall.json"

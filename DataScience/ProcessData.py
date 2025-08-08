@@ -24,7 +24,7 @@ class DataProcessor:
         Rename columns in the CSV data to match the expected format.
         """
         self.csv_data.rename(columns={
-            "time": "time_s",
+            "time": "time_datetime",
             "heartrate": "heartrate_bpm",
             "cadence": "cadence_rpm",
             "distance": "distance_m",
@@ -32,8 +32,8 @@ class DataProcessor:
             "velocity": "velocity_mps",
             "grade": "grade_percent",
             "moving": "moving",
-            "latitude": "latitude",
-            "longitude": "longitude"
+            "latitude": "latitude_degree",
+            "longitude": "longitude_degree"
         }, inplace=True)
 
     def interpolate_missing_data(self) -> None:
@@ -45,12 +45,12 @@ class DataProcessor:
         self.csv_data["is_original"] = True
 
         # resample the data to interpolate missing rows
-        # first time_s row should be start_date_local from overall.json
+        # first time_datetime row should be start_date_local from overall.json
         start_date_local = self.json_data["start_date_local"]
         # Convert to pandas.Timestamp and remove timezone info if present
         start_date_local_naive = pd.to_datetime(start_date_local).tz_localize(None)
-        self.csv_data["time_s"] = pd.to_datetime(self.csv_data["time_s"], unit='s', origin=start_date_local_naive)
-        self.csv_data.set_index("time_s", inplace=True)
+        self.csv_data["time_datetime"] = pd.to_datetime(self.csv_data["time_datetime"], unit='s', origin=start_date_local_naive)
+        self.csv_data.set_index("time_datetime", inplace=True)
 
         # Create a complete time range for every second
         start_time = self.csv_data.index.min()
@@ -67,8 +67,29 @@ class DataProcessor:
 
         # convert the index to seconds
         self.csv_data.reset_index(inplace=True)
-        self.csv_data.rename(columns={"index": "time_s"}, inplace=True)
+        self.csv_data.rename(columns={"index": "time_datetime"}, inplace=True)
 
+    def smooth_data(self, features: list, window_size: int = 10) -> None:
+        """
+        Smooth the data using a rolling average.
+        """
+        for feature in features:
+            self.csv_data[f"smooth_{feature}"] = self.csv_data[feature].rolling(window=window_size, min_periods=1).mean()
+
+
+        # self.csv_data["heartrate_smooth_bps"] = self.csv_data["heartrate_bpm"].rolling(window=window_size, min_periods=1).mean() / 60  # Convert bpm to bps
+        # self.csv_data["velocity_smooth_mps"] = self.csv_data["velocity_mps"].rolling(window=window_size, min_periods=1).mean()
+        # self.csv_data["cadence_smooth_rps"] = self.csv_data["cadence_rps"].rolling(window=window_size, min_periods=1).mean()
+        # self.csv_data["altitude_smooth_m"] = self.csv_data["altitude_m"].rolling(window=window_size, min_periods=1).mean()
+        # self.csv_data["grade_smooth_percent"] = self.csv_data["grade_percent"].rolling(window=window_size, min_periods=1).mean()
+
+    def _minute_to_second(self) -> None:
+        """
+        Convert units in the data.
+        """
+        # Convert minutes to seconds
+        self.csv_data["heartrate_bps"] = self.csv_data["heartrate_bpm"] / 60  # Convert bpm to bps
+        self.csv_data["cadence_rps"] = self.csv_data["cadence_rpm"] / 60  # Convert rpm to rps
 
     def _calculate_bearing(self, lat1, lon1, lat2, lon2):
         """
@@ -94,19 +115,28 @@ class DataProcessor:
         return standard_bearing_deg  # Return the standard bearing in degrees
 
 
-    def feature_engineering(self, resting_heart_rate: float = 60, shift: int = 3) -> None:
+    def feature_engineering(self, resting_heart_rate: float = 60) -> None:
         """
         This function performs feature engineering on the data.
         """
+        # make constants to make it easier to change later
+        lat = "latitude_degree"
+        lon = "longitude_degree"
+        alt = "smooth_altitude_m"
+        hr = "smooth_heartrate_bps"
+        vel = "smooth_velocity_mps"
+        cad = "smooth_cadence_rps"
+
+
         # --------------------------- WIND DIRECTION AND SPEED ---------------------------
         # determine direction in which person is currently moving
         # create a new column for the bearing
         # first row will have no bearing, so we will calculate the bearing for the first two rows
-        self.csv_data["delta_latitude"] = self.csv_data["latitude"].diff()  # Change in latitude
-        self.csv_data["delta_longitude"] = self.csv_data["longitude"].diff()  # Change in longitude
+        self.csv_data["delta_latitude"] = self.csv_data[lat].diff()  # Change in latitude
+        self.csv_data["delta_longitude"] = self.csv_data[lon].diff()  # Change in longitude
         for i in range(1, len(self.csv_data)):
-            lat1, lon1 = self.csv_data.loc[i - 1, ["latitude", "longitude"]]
-            lat2, lon2 = self.csv_data.loc[i, ["latitude", "longitude"]]
+            lat1, lon1 = self.csv_data.loc[i - 1, [lat, lon]]
+            lat2, lon2 = self.csv_data.loc[i, [lat, lon]]
             self.csv_data.at[i, "athletedir_degree"] = self._calculate_bearing(lat1, lon1, lat2, lon2)
         self.csv_data["athletedir_degree"] = self.csv_data["athletedir_degree"]
 
@@ -118,34 +148,58 @@ class DataProcessor:
         self.csv_data["relative_winddir_degree"] = (self.csv_data["winddir_degree"] - self.csv_data["athletedir_degree"]) % 360
         self.csv_data["headwind_mps"] = self.csv_data["windspeed_mps"] * np.cos(np.radians(self.csv_data["relative_winddir_degree"]))
         self.csv_data["crosswind_mps"] = self.csv_data["windspeed_mps"] * np.sin(np.radians(self.csv_data["relative_winddir_degree"]))
-        self.csv_data["headwind_mps"] = self.csv_data["headwind_mps"]
-        self.csv_data["crosswind_mps"] = self.csv_data["crosswind_mps"]
+
+        # delete the temporary columns
+        self.csv_data.drop(columns=["delta_latitude", "delta_longitude", "windspeed_mps", "athletedir_degree", "winddir_degree"], inplace=True)
 
         # --------------------------- STRIDE LENGTH ---------------------------
-        self.csv_data["stride_length_m"] = self.csv_data["velocity_mps"] / (self.csv_data["cadence_rpm"] / 60)  # meters per stride
-        self.csv_data["stride_length_m"] = self.csv_data["stride_length_m"]
+        self.csv_data["stride_length_m"] = self.csv_data[vel] / self.csv_data[cad]  # meters per stride for 1 stride
         # set stride length to 0 if it is infinity
         self.csv_data.loc[self.csv_data["stride_length_m"] == np.inf, "stride_length_m"] = 0  # Set infinity to 0
 
         # --------------------------- DIFF ALTITUDE ---------------------------
-        self.csv_data["diff_altitude_m"] = self.csv_data["altitude_m"].diff()
+        self.csv_data["diff_altitude_mps"] = self.csv_data[alt].diff()
 
         # --------------------------- PACE EFFICIENCY ---------------------------
         # data["pace_efficiency"] = data["velocity_mps"] / (data["heartrate_bpm"] / 60)  # m/s per bpm
         # resting heart rate
-        self.csv_data["pace_efficiency"] = (self.csv_data["velocity_mps"] / self.json_data["max_speed"]) * (1 - (self.csv_data["heartrate_bpm"] - resting_heart_rate) / self.json_data["max_heartrate"])
+        self.csv_data["pace_efficiency"] = (self.csv_data[vel] / self.json_data["max_speed"]) * (1 - (self.csv_data[hr] - (resting_heart_rate/60)) / (self.json_data["max_heartrate"]/60))
         self.csv_data["diff_pace_efficiency"] = self.csv_data["pace_efficiency"].diff()  # Change in pace efficiency
 
         # --------------------------- DIFF HEART RATE ---------------------------
-        self.csv_data["diff_heartrate_bpm"] = self.csv_data["heartrate_bpm"].diff()  # Change in heart rate
-        self.csv_data["diff_heartrate_shift_bpm"] = self.csv_data["diff_heartrate_bpm"].shift(shift)  # Shift the diff_heartrate_bpm column by 1 row
+        self.csv_data["diff_heartrate_bps2"] = self.csv_data[hr].diff()  # Change in heart rate
 
         # --------------------------- ACCELERATION ---------------------------
-        self.csv_data["acceleration_mps2"] = self.csv_data["velocity_mps"].diff()  # m/s^2
-        self.csv_data["acceleration_shift_mps2"] = self.csv_data["acceleration_mps2"].shift(shift)  # Shift the acceleration column by 1 row
+        self.csv_data["diff_velocity_mps2"] = self.csv_data[vel].diff()  # m/s^2
 
         # # remove rows with NaN values
         # self.csv_data.dropna(inplace=True)
+
+    def process(self) -> None:
+        """
+        Process the data by cleaning, interpolating, unit conversion, smoothing, and feature engineering.
+        """
+        # interpolate missing data
+        self.interpolate_missing_data()
+        # convert units
+        self._minute_to_second()
+        # smooth the data
+        self.smooth_data(window_size=10, features=[
+            "heartrate_bps", 
+            "velocity_mps", 
+            "cadence_rps", 
+            "altitude_m", 
+            "grade_percent",
+        ])
+
+        # perform feature engineering
+        self.feature_engineering(resting_heart_rate=60)
+
+        # smooth the data again after feature engineering
+        self.smooth_data(window_size=10, features=[
+            "headwind_mps",
+            "crosswind_mps",
+        ])
 
     def save_to_csv(self, folder_path: str, filename: str) -> None:
         """
