@@ -185,7 +185,7 @@ class DataProcessor:
         # convert units
         self._minute_to_second()
         # smooth the data
-        self.smooth_data(window_size=10, features=[
+        self.smooth_data(window_size=5, features=[
             "heartrate_bps", 
             "velocity_mps", 
             "cadence_rps", 
@@ -197,7 +197,7 @@ class DataProcessor:
         self.feature_engineering(resting_heart_rate=60)
 
         # smooth the data again after feature engineering
-        self.smooth_data(window_size=10, features=[
+        self.smooth_data(window_size=5, features=[
             "headwind_mps",
             "crosswind_mps",
         ])
