@@ -5,3 +5,4 @@ app_icon.png
 /runs
 __pycache__/
 /archive
+/model_coefficients.json
