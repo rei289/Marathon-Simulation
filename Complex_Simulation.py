@@ -13,6 +13,7 @@ In addition to the Kellner model, this simulation incorporates:
 
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 
 class Runner:
     def __init__(self, params):
@@ -26,16 +27,37 @@ class Runner:
         
         # State Variables
         self.velocity = [0.0]
-        self.distance_covered = 0.0
         self.energy = [self.E0]
 
 class Terrain:
-    def __init__(self, elevation_profile):
-        self.elevation_profile = elevation_profile
+    def __init__(self, data):
+        self.df = pd.read_csv(data)[['distance_m', 'grade_percent', 'headwind_mps']].fillna(0)
+    
+    def get_grade(self, distance) -> float:
+        """
+        Returns the grade (theta) in radians at a given distance along the course.
+        """
+        # from the distance column, check which distance is the closest
+        closest_idx = (self.df['distance_m'] - distance).abs().idxmin()
+        grade_percent = self.df.loc[closest_idx, 'grade_percent']
+
+        return np.arctan(grade_percent / 100.0)  # convert percent grade to radians (assuming small angles)
+    
+    def get_headwind(self, distance) -> float:
+        """
+        Returns the headwind speed in m/s at a given distance along the course.
+        """
+        closest_idx = (self.df['distance_m'] - distance).abs().idxmin()
+        headwind = self.df.loc[closest_idx, 'headwind_mps']
+        return headwind
+
 
 class MarathonSimulation:
-    def __init__(self, runner, target_distance=42195, dt=0.01, const_v=None):
+    def __init__(self, runner, terrain, target_distance=42195, dt=0.01, const_v=None):
         self.runner = runner
+        self.terrain = terrain
+        self.distance_covered = 0.0
+
         self.target_dist = target_distance
         self.dt = dt
         self.time_elapsed = [0]
@@ -46,38 +68,48 @@ class MarathonSimulation:
         self.t1 = None
         self.t2 = None
         self.time_phase = False if self.t1 is None or self.t2 is None else True
+
+        self.elevation_profile = [0.0]
         
     def step(self):
         """
         Runs one step of the simulation, updating the runner's velocity, energy, and distance based on the current phase of the run.
         """
+        # determine the current terrain conditions based on the distance covered
+        theta = self.terrain.get_grade(self.distance_covered)
+        # theta = 1.0
+        headwind = self.terrain.get_headwind(self.distance_covered)
+
+        # add it to a list for plotting later
+        self.elevation_profile.append(theta)
+
         if self.time_phase:
             if self.time_elapsed[-1] < self.t1:
-                self.phase_1()
+                self.phase_1(theta)
             elif self.t1 <= self.time_elapsed[-1] < self.t2:
-                self.phase_2()
+                self.phase_2(theta)
             else:
-                self.phase_3()
+                self.phase_3(theta)
         else:  
             # determine which phase we are in based on certain factors
             if self.runner.velocity[-1] < self.const_v and self.runner.energy[-1] > 0: # if we havent reached the constant velocity yet, we are in phase 1
-                self.phase_1()
+                self.phase_1(theta)
             elif self.runner.velocity[-1] >= self.const_v and self.runner.energy[-1] > 0: # if we have reached the constant velocity and still have energy, we are in phase 2
                 self.t1 = self.time_elapsed[-1] if self.t1 is None else self.t1
-                self.phase_2()
+                self.phase_2(theta)
             elif self.runner.energy[-1] <= 0: # if we have no energy left, we are in phase 3
                 self.t2 = self.time_elapsed[-1] if self.t2 is None else self.t2
-                self.phase_3()
+                self.phase_3(theta)
 
             else:
                 raise ValueError("Invalid state: velocity and energy values do not correspond to any phase.")
 
         # now update the time and distance covered
         self.time_elapsed.append(self.time_elapsed[-1] + self.dt)
-        self.runner.distance_covered += self.runner.velocity[-1] * self.dt
+        self.distance_covered += self.runner.velocity[-1] * self.dt
 
     # def phase_1(self) -> None:
-    def phase_1(self, theta:int = 0) -> None:
+    def phase_1(self, theta:float = 0.0) -> None:
         """
         This function provides the Acceleration Phase Logic"""
         self.runner.velocity.append(self.runner.velocity[-1] + (self.runner.F - (1/self.runner.tau) * self.runner.velocity[-1] - self.g*np.sin(theta))*self.dt)
@@ -85,7 +117,7 @@ class MarathonSimulation:
         self.runner.energy.append(self.runner.energy[-1] + (energy_change if energy_change < 0 else 0))
 
     # def phase_2(self) -> None:
-    def phase_2(self, theta:int = 0) -> None:
+    def phase_2(self, theta:float = 0.0) -> None:
         """
         This function provides the Constant Velocity Phase Logic
         """
@@ -93,7 +125,7 @@ class MarathonSimulation:
         self.runner.energy.append(self.runner.energy[-1] + (self.runner.sigma - self.const_v*(self.const_v/self.runner.tau + self.g*np.sin(theta)) - (self.runner.k*self.const_v**2*self.time_elapsed[-1])/self.runner.tau)*self.dt)
 
     # def phase_3(self) -> None:
-    def phase_3(self, theta:int = 0) -> None:
+    def phase_3(self, theta:float = 0.0) -> None:
         """
         This function provides the Deceleration Phase Logic
         """
@@ -117,11 +149,11 @@ class MarathonSimulation:
         Runs the simulation until the target distance is reached
         """
         # while self.time_elapsed[-1] < 10:
-        while self.runner.distance_covered < self.target_dist:
+        while self.distance_covered < self.target_dist:
             self.step()
 
         print(f"Time Elapsed: {self.time_elapsed[-1]} seconds")
-        print(f"Distance Covered: {self.runner.distance_covered} meters")
+        print(f"Distance Covered: {self.distance_covered} meters")
         print(f"t1 (start of constant velocity phase): {self.t1} seconds")
         print(f"t2 (start of deceleration phase): {self.t2} seconds")
 
@@ -135,7 +167,12 @@ if __name__ == "__main__":
         'sigma': 58.0,      # Energy supply rate (m^2/s^3)
         'gamma': 4.08e-5    # Fatigue constant 
     })
-    sim = MarathonSimulation(runner)
+
+    terrain = Terrain(data="runs/2025-10-10_10-42/2025-10-10_10-42_streams.csv")  # flat terrain for now, can be modified to include elevation changes
+
+    # print(terrain.df.head())  # check the terrain data
+
+    sim = MarathonSimulation(runner, terrain, target_distance=4300, dt=0.01, const_v=None)
     sim.loop()
 
     # plotting results
@@ -151,6 +188,16 @@ if __name__ == "__main__":
     plt.title('Runner Energy Over Time')
     plt.xlabel('Time (s)')
     plt.ylabel('Energy (J)')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    # plotting elevation profile
+    plt.figure(figsize=(12, 4))
+    plt.plot(sim.time_elapsed, sim.elevation_profile, label='Elevation Profile (radians)')
+    plt.title('Elevation Profile Over Distance')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Grade (radians)')
     plt.legend()
     plt.tight_layout()
     plt.show()
