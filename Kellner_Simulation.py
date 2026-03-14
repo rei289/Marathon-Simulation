@@ -1,5 +1,5 @@
 """
-This is a test file for the mathematical model
+This is a script which runs the Kellner Model
 
 The model assumes throughout the run there are 3 main phases:
     1. Acceleration phase
@@ -24,34 +24,49 @@ class Runner:
         self.velocity = [0.0]
         self.distance_covered = 0.0
         self.energy = [self.E0]
-        self.is_bonked = False  # Switch to Stage 3
 
 class MarathonSimulation:
-    def __init__(self, runner, target_distance=42195, dt=1):
+    def __init__(self, runner, target_distance=42195, dt=1, const_v=None):
         self.runner = runner
         self.target_dist = target_distance
         self.dt = dt
         self.time_elapsed = [0]
-        self.const_v = self._constant_velocity()
+        self.const_v = const_v if const_v is not None else self._constant_velocity()
+
         self.t1 = None
         self.t2 = None
+        self.time_phase = False if self.t1 is None or self.t2 is None else True
         
     def step(self):
-        """Runs one second of the race."""
-        
-        # determine which phase we are in based on certain factors
-        if self.runner.velocity[-1] < self.const_v and self.runner.energy[-1] > 0: # if we havent reached the constant velocity yet, we are in phase 1
-            self.phase_1()
-        elif self.runner.velocity[-1] >= self.const_v and self.runner.energy[-1] > 0: # if we have reached the constant velocity and still have energy, we are in phase 2
-            self.t1 = self.time_elapsed[-1] if self.t1 is None else self.t1
-            self.phase_2()
-        elif self.runner.energy[-1] <= 0: # if we have no energy left, we are in phase 3
-            self.t2 = self.time_elapsed[-1] if self.t2 is None else self.t2
-            self.phase_3()
+        """
+        Runs one step of the simulation, updating the runner's velocity, energy, and distance based on the current phase of the run.
+        """
+        # if self.t1 is not None and self.t2 is not None:
+        if self.time_phase:
+            if self.time_elapsed[-1] < self.t1:
+                self.phase_1()
+            elif self.t1 <= self.time_elapsed[-1] < self.t2:
+                self.phase_2()
+            else:
+                self.phase_3()
+        else:  
+            # determine which phase we are in based on certain factors
+            if self.runner.velocity[-1] < self.const_v and self.runner.energy[-1] > 0: # if we havent reached the constant velocity yet, we are in phase 1
+            # if self.runner.velocity[-1] < self.const_v and self.runner.energy[-1] > 0: # if we havent reached the constant velocity yet, we are in phase 1
+                self.phase_1()
+            elif self.runner.velocity[-1] >= self.const_v and self.runner.energy[-1] > 0: # if we have reached the constant velocity and still have energy, we are in phase 2
+            # elif self.runner.velocity[-1] >= self.const_v and self.runner.energy[-1] > 0: # if we have reached the constant velocity and still have energy, we are in phase 2
+                self.t1 = self.time_elapsed[-1] if self.t1 is None else self.t1
+                self.phase_2()
+            elif self.runner.energy[-1] <= 0: # if we have no energy left, we are in phase 3
+            # elif self.runner.energy[-1] <= 0: # if we have no energy left, we are in phase 3
+                self.t2 = self.time_elapsed[-1] if self.t2 is None else self.t2
+                self.phase_3()
 
-        # 2. Update Runner State
-        # Update energy based on: dE/dt = sigma - f*v - fatigue_loss [cite: 260]
-        # Update distance: dD = v * dt
+            else:
+                raise ValueError("Invalid state: velocity and energy values do not correspond to any phase.")
+
+        # now update the time and distance covered
         self.time_elapsed.append(self.time_elapsed[-1] + self.dt)
         self.runner.distance_covered += self.runner.velocity[-1] * self.dt
 
@@ -59,7 +74,8 @@ class MarathonSimulation:
         """
         This function provides the Acceleration Phase Logic"""
         self.runner.velocity.append(self.runner.F*self.runner.tau*(1-np.exp(-self.time_elapsed[-1]/self.runner.tau)))
-        self.runner.energy.append(self.runner.energy[-1] + (self.runner.sigma - self.runner.F*self.runner.velocity[-1])*self.dt)
+        energy_change = (self.runner.sigma - self.runner.F*self.runner.velocity[-1])*self.dt
+        self.runner.energy.append(self.runner.energy[-1] + (energy_change if energy_change < 0 else 0))
 
     def phase_2(self) -> None:
         """
@@ -87,7 +103,9 @@ class MarathonSimulation:
         return const_v
 
     def loop(self):
-        """Runs the simulation until the target distance is reached."""
+        """
+        Runs the simulation until the target distance is reached
+        """
         while self.runner.distance_covered < self.target_dist:
             self.step()
 
@@ -95,15 +113,15 @@ class MarathonSimulation:
         print(f"Distance Covered: {self.runner.distance_covered} meters")
         print(f"t1 (start of constant velocity phase): {self.t1} seconds")
         print(f"t2 (start of deceleration phase): {self.t2} seconds")
-                # return  # For testing, we will stop after 500 iterations
 
 if __name__ == "__main__":
+    # specify the runner parameters based on the paper's values for now
     runner = Runner(params={
         # these are mens average
-        'F': 14.36,       # Max thrust (m/s^2)
-        'tau': 0.739,     # Resistance coefficient (s)
-        'E0': 3114.0,   # Initial energy (m^2/s^2)
-        'sigma': 58.0,  # Energy supply rate (m^2/s^3)
+        'F': 14.36,         # Max thrust (m/s^2)
+        'tau': 0.739,       # Resistance coefficient (s)
+        'E0': 3114.0,       # Initial energy (m^2/s^2)
+        'sigma': 58.0,      # Energy supply rate (m^2/s^3)
         'gamma': 4.08e-5    # Fatigue constant 
     })
     sim = MarathonSimulation(runner)
