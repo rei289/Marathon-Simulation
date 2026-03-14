@@ -24,14 +24,20 @@ class Runner:
         self.sigma = params['sigma']  # Energy supply rate [cite: 9]
         self.gamma = params['gamma']  # Fatigue constant [cite: 9]
         self.k = self.gamma*2
+
+        # other physiological constants used for the more complex model
+        self.cd = params['drag_coefficient']  # Drag coefficient for air resistance
+        self.area = params['frontal_area']          # Frontal area of the runner (m^2)
         
         # State Variables
         self.velocity = [0.0]
         self.energy = [self.E0]
 
 class Terrain:
-    def __init__(self, data):
+    def __init__(self, params, data):
         self.df = pd.read_csv(data)[['distance_m', 'grade_percent', 'headwind_mps']].fillna(0)
+        self.rho = params['rho'] # air density (kg/m^3)
+
     
     def get_grade(self, distance) -> float:
         """
@@ -70,6 +76,7 @@ class MarathonSimulation:
         self.time_phase = False if self.t1 is None or self.t2 is None else True
 
         self.elevation_profile = [0.0]
+        self.headwind_profile = [0.0]
         
     def step(self):
         """
@@ -77,29 +84,31 @@ class MarathonSimulation:
         """
         # determine the current terrain conditions based on the distance covered
         theta = self.terrain.get_grade(self.distance_covered)
-        # theta = 1.0
         headwind = self.terrain.get_headwind(self.distance_covered)
+        # theta = 0.0
+        # headwind = 0.0
 
         # add it to a list for plotting later
         self.elevation_profile.append(theta)
+        self.headwind_profile.append(headwind)
 
         if self.time_phase:
             if self.time_elapsed[-1] < self.t1:
-                self.phase_1(theta)
+                self.phase_1(theta, headwind)
             elif self.t1 <= self.time_elapsed[-1] < self.t2:
-                self.phase_2(theta)
+                self.phase_2(theta, headwind)
             else:
-                self.phase_3(theta)
+                self.phase_3(theta, headwind)
         else:  
             # determine which phase we are in based on certain factors
             if self.runner.velocity[-1] < self.const_v and self.runner.energy[-1] > 0: # if we havent reached the constant velocity yet, we are in phase 1
-                self.phase_1(theta)
+                self.phase_1(theta, headwind)
             elif self.runner.velocity[-1] >= self.const_v and self.runner.energy[-1] > 0: # if we have reached the constant velocity and still have energy, we are in phase 2
                 self.t1 = self.time_elapsed[-1] if self.t1 is None else self.t1
-                self.phase_2(theta)
+                self.phase_2(theta, headwind)
             elif self.runner.energy[-1] <= 0: # if we have no energy left, we are in phase 3
                 self.t2 = self.time_elapsed[-1] if self.t2 is None else self.t2
-                self.phase_3(theta)
+                self.phase_3(theta, headwind)
 
             else:
                 raise ValueError("Invalid state: velocity and energy values do not correspond to any phase.")
@@ -108,32 +117,47 @@ class MarathonSimulation:
         self.time_elapsed.append(self.time_elapsed[-1] + self.dt)
         self.distance_covered += self.runner.velocity[-1] * self.dt
 
-    # def phase_1(self) -> None:
-    def phase_1(self, theta:float = 0.0) -> None:
+    def phase_1(self, theta:float = 0.0, headwind:float = 0.0) -> None:
         """
         This function provides the Acceleration Phase Logic"""
-        self.runner.velocity.append(self.runner.velocity[-1] + (self.runner.F - (1/self.runner.tau) * self.runner.velocity[-1] - self.g*np.sin(theta))*self.dt)
+        # self.runner.velocity.append(self.runner.velocity[-1] + (self.runner.F - (1/self.runner.tau) * self.runner.velocity[-1] - self.g*np.sin(theta))*self.dt)
+        # self.runner.energy.append(self.runner.energy[-1] + (energy_change if energy_change < 0 else 0))
+        # energy_change = (self.runner.sigma - self.runner.F*self.runner.velocity[-1])*self.dt
+        self.runner.velocity.append(self.runner.velocity[-1] \
+                                + (self.runner.F         \
+                                    - (1/self.runner.tau) * self.runner.velocity[-1] \
+                                    - self.g*np.sin(theta) \
+                                    - 0.5*self.terrain.rho*self.runner.cd*self.runner.area*(self.runner.velocity[-1] + headwind)**2)*self.dt)
         energy_change = (self.runner.sigma - self.runner.F*self.runner.velocity[-1])*self.dt
         self.runner.energy.append(self.runner.energy[-1] + (energy_change if energy_change < 0 else 0))
 
-    # def phase_2(self) -> None:
-    def phase_2(self, theta:float = 0.0) -> None:
+    def phase_2(self, theta:float = 0.0, headwind:float = 0.0) -> None:
         """
         This function provides the Constant Velocity Phase Logic
         """
         self.runner.velocity.append(self.const_v)
-        self.runner.energy.append(self.runner.energy[-1] + (self.runner.sigma - self.const_v*(self.const_v/self.runner.tau + self.g*np.sin(theta)) - (self.runner.k*self.const_v**2*self.time_elapsed[-1])/self.runner.tau)*self.dt)
+        self.runner.energy.append(self.runner.energy[-1] \
+                                + (self.runner.sigma \
+                                     - self.const_v*(self.const_v/self.runner.tau \
+                                            + self.g*np.sin(theta) \
+                                            + 0.5*self.terrain.rho*self.runner.cd*self.runner.area*(self.const_v + headwind)**2) \
+                                - (self.runner.k*self.const_v**2*self.time_elapsed[-1])/self.runner.tau)*self.dt)
 
-    # def phase_3(self) -> None:
-    def phase_3(self, theta:float = 0.0) -> None:
+    def phase_3(self, theta:float = 0.0, headwind:float = 0.0) -> None:
         """
         This function provides the Deceleration Phase Logic
         """
-        velocity = (self.const_v**2 + self.runner.k*self.t2*self.const_v**2 - self.runner.tau*self.runner.sigma - 0.5*self.runner.k*(self.const_v**2)*self.runner.tau + self.runner.tau*self.g*np.sin(theta))*np.exp(-2*(self.time_elapsed[-1]-self.t2)/self.runner.tau) \
-                                     + self.runner.sigma*self.runner.tau  \
-                                     + 0.5*self.runner.k*(self.const_v**2)*(self.runner.tau-2*self.time_elapsed[-1]) \
-                                     - self.runner.tau*self.g*np.sin(theta)
-        self.runner.velocity.append(np.sqrt(max(0, velocity)))
+        # velocity = (self.const_v**2 + self.runner.k*self.t2*self.const_v**2 - self.runner.tau*self.runner.sigma - 0.5*self.runner.k*(self.const_v**2)*self.runner.tau + self.runner.tau*self.g*np.sin(theta))*np.exp(-2*(self.time_elapsed[-1]-self.t2)/self.runner.tau) \
+        #                              + self.runner.sigma*self.runner.tau  \
+        #                              + 0.5*self.runner.k*(self.const_v**2)*(self.runner.tau-2*self.time_elapsed[-1]) \
+        #                              - self.runner.tau*self.g*np.sin(theta)
+        # self.runner.velocity.append(np.sqrt(max(0, velocity)))
+        self.runner.velocity.append(self.runner.velocity[-1] \
+                                +  (self.runner.sigma/self.runner.velocity[-1] \
+                                - (1/self.runner.tau)*self.runner.velocity[-1] \
+                                - self.g*np.sin(theta) \
+                                - 0.5*self.terrain.rho*self.runner.cd*self.runner.area*(self.runner.velocity[-1] + headwind)**2 \
+                                - (self.runner.k*self.const_v**2*self.time_elapsed[-1])/(self.runner.tau*self.runner.velocity[-1]))*self.dt)
         self.runner.energy.append(0.0)
     
     def _constant_velocity(self):
@@ -156,23 +180,47 @@ class MarathonSimulation:
         print(f"Distance Covered: {self.distance_covered} meters")
         print(f"t1 (start of constant velocity phase): {self.t1} seconds")
         print(f"t2 (start of deceleration phase): {self.t2} seconds")
+        print(f"Constant Velocity (v): {self.const_v} m/s")
 
 if __name__ == "__main__":
-    # specify the runner parameters based on the paper's values for now
+    # for a more reasonable run 
     runner = Runner(params={
         # these are mens average
-        'F': 14.36,         # Max thrust (m/s^2)
-        'tau': 0.739,       # Resistance coefficient (s)
-        'E0': 3114.0,       # Initial energy (m^2/s^2)
-        'sigma': 58.0,      # Energy supply rate (m^2/s^3)
-        'gamma': 4.08e-5    # Fatigue constant 
-    })
+        'F': 10.5,          # Max thrust (m/s^2) (9.0–12.0)
+        'tau': 1.0,         # Resistance coefficient (s) (0.8–1.2)
+        'E0': 2200.0,       # Initial energy (m^2/s^2) (1800–2600)
+        'sigma': 45.0,      # Energy supply rate (m^2/s^3) (35-55)
+        'gamma': 5.0e-5,    # Fatigue constant (3e-5 to 8e-5)
 
-    terrain = Terrain(data="runs/2025-10-10_10-42/2025-10-10_10-42_streams.csv")  # flat terrain for now, can be modified to include elevation changes
+        # 'drag_coefficient': 0.65,  # Drag coefficient for a runner (dimensionless)
+        'drag_coefficient': 1.0,  # Drag coefficient for a runner (dimensionless) (0.9-1.1)
+        'frontal_area': 0.47,      # Frontal area of the runner (m^2) (0.4-0.55)
+
+    })
+    # # specify the runner parameters based on the paper's values for now
+    # runner = Runner(params={
+    #     # these are mens average
+    #     'F': 14.36,         # Max thrust (m/s^2)
+    #     'tau': 0.739,       # Resistance coefficient (s)
+    #     'E0': 3114.0,       # Initial energy (m^2/s^2)
+    #     'sigma': 58.0,      # Energy supply rate (m^2/s^3)
+    #     'gamma': 4.08e-5,    # Fatigue constant 
+
+    #     'drag_coefficient': 0.65,  # Drag coefficient for a runner (dimensionless)
+    #     # 'drag_coefficient': 1.0,  # Drag coefficient for a runner (dimensionless)
+    #     'frontal_area': 0.5,      # Frontal area of the runner (m^2)
+
+    # })
+
+    terrain = Terrain(params={
+        'rho': 1.225  # air density at sea level (kg/m^3)
+
+    }, data="runs/2025-10-10_10-42/2025-10-10_10-42_streams.csv")  # flat terrain for now, can be modified to include elevation changes
 
     # print(terrain.df.head())  # check the terrain data
 
-    sim = MarathonSimulation(runner, terrain, target_distance=4300, dt=0.01, const_v=None)
+    sim = MarathonSimulation(runner, terrain, target_distance=4300, dt=0.01)
+    # sim = MarathonSimulation(runner, terrain, target_distance=4300, dt=0.01, const_v=4.0)
     sim.loop()
 
     # plotting results
@@ -198,6 +246,16 @@ if __name__ == "__main__":
     plt.title('Elevation Profile Over Distance')
     plt.xlabel('Time (s)')
     plt.ylabel('Grade (radians)')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    # plotting headwind profile
+    plt.figure(figsize=(12, 4))
+    plt.plot(sim.time_elapsed, sim.headwind_profile, label='Headwind Profile (m/s)')
+    plt.title('Headwind Profile Over Distance')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Headwind Speed (m/s)')
     plt.legend()
     plt.tight_layout()
     plt.show()
