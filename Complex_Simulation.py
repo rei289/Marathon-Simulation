@@ -9,8 +9,10 @@ The model assumes throughout the run there are 3 main phases:
 In addition to the Kellner model, this simulation incorporates:
     - Slope of the terrain (theta) which affects the runner's velocity and energy expenditure
     - Air resistance which is proportional to the square of the velocity and a drag coefficient
+    - Heat stress which reduces the effective aerobic power supply (sigma) based on the Wet Bulb Globe Temperature (WBGT)
 """
 
+from dataclasses import dataclass
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -83,7 +85,7 @@ class Terrain:
         return 0.7*temp_w + 0.2*temp_g + 0.1*self.temp_d  # weighted average to get a single WBGT value
 
 class MarathonSimulation:
-    def __init__(self, runner, terrain, target_distance=42195, dt=0.01, const_v=None):
+    def __init__(self, runner, terrain, target_distance=42195, dt=0.01, const_v=None, num_sim:int=1000):
         self.runner = runner
         self.terrain = terrain
         self.distance_covered = 0.0
@@ -101,6 +103,8 @@ class MarathonSimulation:
 
         self.elevation_profile = [0.0]
         self.headwind_profile = [0.0]
+
+        self.num_sim = num_sim
         
     def step(self):
         """
@@ -188,13 +192,18 @@ class MarathonSimulation:
         """
         Runs the simulation until the target distance is reached
         """
+        # TODO - make this into a monte carlo simulation, preferbaly with vectorized operations
         # before we start, calculate the effective aerobic supply using the WBGT to adjust the sigma value based on the heat stress
-        print(f"Initial Energy Supply Rate (sigma): {self.runner.sigma:.2f} m^2/s^3")
         wbgt = self.terrain.get_wbgt()
         self.runner.sigma *= 1 - self.terrain.psi*max(0, wbgt - 15)
-        print(f"Calculated WBGT: {wbgt:.2f} °C")
-        print(f"Adjusted Energy Supply Rate (sigma): {self.runner.sigma:.2f} m^2/s^3")
+        # print(f"Initial Energy Supply Rate (sigma): {self.runner.sigma:.2f} m^2/s^3")
+        # print(f"Calculated WBGT: {wbgt:.2f} °C")
+        # print(f"Adjusted Energy Supply Rate (sigma): {self.runner.sigma:.2f} m^2/s^3")
         # while self.time_elapsed[-1] < 10:
+
+        # create an array to store the results of multiple simulations
+        results = np.zeros((self.num_sim, ))
+
         while self.distance_covered < self.target_dist:
             self.step()
 
@@ -203,6 +212,17 @@ class MarathonSimulation:
         print(f"t1 (start of constant velocity phase): {self.t1} seconds")
         print(f"t2 (start of deceleration phase): {self.t2} seconds")
         print(f"Constant Velocity (v): {self.const_v} m/s")
+
+@dataclass
+class SimConfig:
+    F: float          # Max thrust (m/s^2)
+    E0: float         # Initial energy (m^2/s^2)
+    tau: float        # Resistance coefficient (s)
+    sigma: float      # Energy supply rate (m^2/s^3)
+    gamma: float      # Fatigue constant (dimensionless)
+    drag_coefficient: float  # Drag coefficient for a runner (dimensionless)
+    frontal_area: float      # Frontal area of the runner (m^2)
+    mass: float              # Mass of the runner (kg)
 
 if __name__ == "__main__":
     # for a more reasonable run 
@@ -245,7 +265,7 @@ if __name__ == "__main__":
     json_data="runs/2025-10-10_10-42/2025-10-10_10-42_overall.json")
     # print(terrain.df.head())  # check the terrain data
 
-    sim = MarathonSimulation(runner, terrain, target_distance=4300, dt=0.01)
+    sim = MarathonSimulation(runner, terrain, target_distance=4300, dt=0.01, num_sim=2)
     # sim = MarathonSimulation(runner, terrain, target_distance=4300, dt=0.01, const_v=4.0)
     sim.loop()
 
