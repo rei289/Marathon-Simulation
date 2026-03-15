@@ -14,6 +14,7 @@ In addition to the Kellner model, this simulation incorporates:
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import json
 
 class Runner:
     def __init__(self, params):
@@ -28,17 +29,27 @@ class Runner:
         # other physiological constants used for the more complex model
         self.cd = params['drag_coefficient']  # Drag coefficient for air resistance
         self.area = params['frontal_area']          # Frontal area of the runner (m^2)
+        self.mass = params['mass']              # Mass of the runner (kg)
         
         # State Variables
         self.velocity = [0.0]
         self.energy = [self.E0]
 
 class Terrain:
-    def __init__(self, params, data):
-        self.df = pd.read_csv(data)[['distance_m', 'grade_percent', 'headwind_mps']].fillna(0)
-        self.rho = params['rho'] # air density (kg/m^3)
+    def __init__(self, params, csv_data, json_data):
+        self.df = pd.read_csv(csv_data)[['distance_m', 'grade_percent', 'headwind_mps']].fillna(0)
+        with open(json_data, 'r') as f:
+            self.weather_info = json.load(f)["weather"]
 
-    
+        self.rho = params['air_density'] # air density (kg/m^3)
+        self.convection = params['convection_heat_transfer_coefficient'] # convection heat transfer coefficient (W/m^2K)
+        self.alpha = params['absorption_coefficient'] # absorption coefficient for solar radiation (dimensionless)
+        self.psi = params['psi']
+
+        self.temp_d = self.weather_info["temp"]
+        self.humidity = self.weather_info["humidity"]
+        self.solar_radiation = self.weather_info["solarradiation"]
+
     def get_grade(self, distance) -> float:
         """
         Returns the grade (theta) in radians at a given distance along the course.
@@ -56,7 +67,20 @@ class Terrain:
         closest_idx = (self.df['distance_m'] - distance).abs().idxmin()
         headwind = self.df.loc[closest_idx, 'headwind_mps']
         return headwind
-
+    
+    def get_wbgt(self) -> float:
+        """
+        Returns the Wet Bulb Globe Temperature (WBGT) based on the weather information.
+        This is a simplified calculation and can be expanded to include more factors.
+        """
+        temp_w = self.temp_d * np.arctan(0.151977*(self.humidity + 8.313659)**(1/2)) \
+            + np.arctan(self.temp_d + self.humidity) \
+            - np.arctan(self.humidity - 1.676331) \
+            + 0.00391838*(self.humidity)**(3/2) * np.arctan(0.023101 * self.humidity) \
+            - 4.686
+        temp_g = self.temp_d + (self.solar_radiation) / (self.convection*self.alpha)  # simplified effect of solar radiation on perceived temperature
+        
+        return 0.7*temp_w + 0.2*temp_g + 0.1*self.temp_d  # weighted average to get a single WBGT value
 
 class MarathonSimulation:
     def __init__(self, runner, terrain, target_distance=42195, dt=0.01, const_v=None):
@@ -120,14 +144,11 @@ class MarathonSimulation:
     def phase_1(self, theta:float = 0.0, headwind:float = 0.0) -> None:
         """
         This function provides the Acceleration Phase Logic"""
-        # self.runner.velocity.append(self.runner.velocity[-1] + (self.runner.F - (1/self.runner.tau) * self.runner.velocity[-1] - self.g*np.sin(theta))*self.dt)
-        # self.runner.energy.append(self.runner.energy[-1] + (energy_change if energy_change < 0 else 0))
-        # energy_change = (self.runner.sigma - self.runner.F*self.runner.velocity[-1])*self.dt
         self.runner.velocity.append(self.runner.velocity[-1] \
                                 + (self.runner.F         \
                                     - (1/self.runner.tau) * self.runner.velocity[-1] \
                                     - self.g*np.sin(theta) \
-                                    - 0.5*self.terrain.rho*self.runner.cd*self.runner.area*(self.runner.velocity[-1] + headwind)**2)*self.dt)
+                                    - (0.5*self.terrain.rho*self.runner.cd*self.runner.area*(self.runner.velocity[-1] + headwind)**2)/self.runner.mass)*self.dt)
         energy_change = (self.runner.sigma - self.runner.F*self.runner.velocity[-1])*self.dt
         self.runner.energy.append(self.runner.energy[-1] + (energy_change if energy_change < 0 else 0))
 
@@ -140,23 +161,18 @@ class MarathonSimulation:
                                 + (self.runner.sigma \
                                      - self.const_v*(self.const_v/self.runner.tau \
                                             + self.g*np.sin(theta) \
-                                            + 0.5*self.terrain.rho*self.runner.cd*self.runner.area*(self.const_v + headwind)**2) \
+                                            + (0.5*self.terrain.rho*self.runner.cd*self.runner.area*(self.const_v + headwind)**2)/self.runner.mass) \
                                 - (self.runner.k*self.const_v**2*self.time_elapsed[-1])/self.runner.tau)*self.dt)
 
     def phase_3(self, theta:float = 0.0, headwind:float = 0.0) -> None:
         """
         This function provides the Deceleration Phase Logic
         """
-        # velocity = (self.const_v**2 + self.runner.k*self.t2*self.const_v**2 - self.runner.tau*self.runner.sigma - 0.5*self.runner.k*(self.const_v**2)*self.runner.tau + self.runner.tau*self.g*np.sin(theta))*np.exp(-2*(self.time_elapsed[-1]-self.t2)/self.runner.tau) \
-        #                              + self.runner.sigma*self.runner.tau  \
-        #                              + 0.5*self.runner.k*(self.const_v**2)*(self.runner.tau-2*self.time_elapsed[-1]) \
-        #                              - self.runner.tau*self.g*np.sin(theta)
-        # self.runner.velocity.append(np.sqrt(max(0, velocity)))
         self.runner.velocity.append(self.runner.velocity[-1] \
                                 +  (self.runner.sigma/self.runner.velocity[-1] \
                                 - (1/self.runner.tau)*self.runner.velocity[-1] \
                                 - self.g*np.sin(theta) \
-                                - 0.5*self.terrain.rho*self.runner.cd*self.runner.area*(self.runner.velocity[-1] + headwind)**2 \
+                                - (0.5*self.terrain.rho*self.runner.cd*self.runner.area*(self.runner.velocity[-1] + headwind)**2)/self.runner.mass \
                                 - (self.runner.k*self.const_v**2*self.time_elapsed[-1])/(self.runner.tau*self.runner.velocity[-1]))*self.dt)
         self.runner.energy.append(0.0)
     
@@ -172,6 +188,12 @@ class MarathonSimulation:
         """
         Runs the simulation until the target distance is reached
         """
+        # before we start, calculate the effective aerobic supply using the WBGT to adjust the sigma value based on the heat stress
+        print(f"Initial Energy Supply Rate (sigma): {self.runner.sigma:.2f} m^2/s^3")
+        wbgt = self.terrain.get_wbgt()
+        self.runner.sigma *= 1 - self.terrain.psi*max(0, wbgt - 15)
+        print(f"Calculated WBGT: {wbgt:.2f} °C")
+        print(f"Adjusted Energy Supply Rate (sigma): {self.runner.sigma:.2f} m^2/s^3")
         # while self.time_elapsed[-1] < 10:
         while self.distance_covered < self.target_dist:
             self.step()
@@ -187,14 +209,15 @@ if __name__ == "__main__":
     runner = Runner(params={
         # these are mens average
         'F': 10.5,          # Max thrust (m/s^2) (9.0–12.0)
-        'tau': 1.0,         # Resistance coefficient (s) (0.8–1.2)
         'E0': 2200.0,       # Initial energy (m^2/s^2) (1800–2600)
+        'tau': 1.0,         # Resistance coefficient (s) (0.8–1.2)
         'sigma': 45.0,      # Energy supply rate (m^2/s^3) (35-55)
         'gamma': 5.0e-5,    # Fatigue constant (3e-5 to 8e-5)
 
         # 'drag_coefficient': 0.65,  # Drag coefficient for a runner (dimensionless)
         'drag_coefficient': 1.0,  # Drag coefficient for a runner (dimensionless) (0.9-1.1)
         'frontal_area': 0.47,      # Frontal area of the runner (m^2) (0.4-0.55)
+        'mass': 70.0              # Mass of the runner (kg) (60-80)
 
     })
     # # specify the runner parameters based on the paper's values for now
@@ -213,10 +236,13 @@ if __name__ == "__main__":
     # })
 
     terrain = Terrain(params={
-        'rho': 1.225  # air density at sea level (kg/m^3)
-
-    }, data="runs/2025-10-10_10-42/2025-10-10_10-42_streams.csv")  # flat terrain for now, can be modified to include elevation changes
-
+        'air_density': 1.225,  # air density at sea level (kg/m^3)
+        'convection_heat_transfer_coefficient': 10.0,  # convection heat transfer coefficient (W/m^2K)
+        'absorption_coefficient': 0.7,  # absorption coefficient for solar radiation (dimensionless)
+        'psi': 0.005,  # weighting factor for the drop in aerobic power per temperature (dimensionless)
+    }, 
+    csv_data="runs/2025-10-10_10-42/2025-10-10_10-42_streams.csv",  # flat terrain for now, can be modified to include elevation changes
+    json_data="runs/2025-10-10_10-42/2025-10-10_10-42_overall.json")
     # print(terrain.df.head())  # check the terrain data
 
     sim = MarathonSimulation(runner, terrain, target_distance=4300, dt=0.01)
