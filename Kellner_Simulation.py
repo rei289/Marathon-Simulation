@@ -26,7 +26,7 @@ class Runner:
         self.energy = [self.E0]
 
 class MarathonSimulation:
-    def __init__(self, runner, target_distance=42195, dt=1, const_v=None):
+    def __init__(self, runner, target_distance=42195, dt=0.01, const_v=None):
         self.runner = runner
         self.target_dist = target_distance
         self.dt = dt
@@ -113,6 +113,7 @@ class MarathonSimulation:
         print(f"Distance Covered: {self.runner.distance_covered} meters")
         print(f"t1 (start of constant velocity phase): {self.t1} seconds")
         print(f"t2 (start of deceleration phase): {self.t2} seconds")
+        print(f"Constant Velocity (v): {self.const_v} m/s")
 
 if __name__ == "__main__":
     # specify the runner parameters based on the paper's values for now
@@ -124,7 +125,8 @@ if __name__ == "__main__":
         'sigma': 58.0,      # Energy supply rate (m^2/s^3)
         'gamma': 4.08e-5    # Fatigue constant 
     })
-    sim = MarathonSimulation(runner)
+    sim = MarathonSimulation(runner, target_distance=4300)
+    # sim = MarathonSimulation(runner, target_distance=4300, const_v=5.0)
     sim.loop()
 
     # plotting results
