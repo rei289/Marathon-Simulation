@@ -12,81 +12,15 @@ In addition to the Kellner model, this simulation incorporates:
     - Heat stress which reduces the effective aerobic power supply (sigma) based on the Wet Bulb Globe Temperature (WBGT)
 """
 
-from dataclasses import dataclass
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import json
-from DataClasses import SimConfig
-
-# class Runner:
-#     def __init__(self, params):
-#         # Physiological Constants from the paper
-#         self.F = params['F']          # Max thrust [cite: 9]
-#         self.E0 = params['E0']        # Initial energy [cite: 9]
-#         self.tau = params['tau']      # Resistance coefficient [cite: 9]
-#         self.sigma = params['sigma']  # Energy supply rate [cite: 9]
-#         self.gamma = params['gamma']  # Fatigue constant [cite: 9]
-#         self.k = self.gamma*2
-
-#         # other physiological constants used for the more complex model
-#         self.cd = params['drag_coefficient']  # Drag coefficient for air resistance
-#         self.area = params['frontal_area']          # Frontal area of the runner (m^2)
-#         self.mass = params['mass']              # Mass of the runner (kg)
-        
-#         # State Variables
-#         self.velocity = [0.0]
-#         self.energy = [self.E0]
-
-# class Terrain:
-#     def __init__(self, params, csv_data, json_data):
-#         self.df = pd.read_csv(csv_data)[['distance_m', 'grade_percent', 'headwind_mps']].fillna(0)
-#         with open(json_data, 'r') as f:
-#             self.weather_info = json.load(f)["weather"]
-
-#         self.rho = params['air_density'] # air density (kg/m^3)
-#         self.convection = params['convection_heat_transfer_coefficient'] # convection heat transfer coefficient (W/m^2K)
-#         self.alpha = params['absorption_coefficient'] # absorption coefficient for solar radiation (dimensionless)
-#         self.psi = params['psi']
-
-#         self.temp_d = self.weather_info["temp"]
-#         self.humidity = self.weather_info["humidity"]
-#         self.solar_radiation = self.weather_info["solarradiation"]
-
-    # def get_grade(self, distance) -> float:
-    #     """
-    #     Returns the grade (theta) in radians at a given distance along the course.
-    #     """
-    #     # from the distance column, check which distance is the closest
-    #     closest_idx = (self.df['distance_m'] - distance).abs().idxmin()
-    #     grade_percent = self.df.loc[closest_idx, 'grade_percent']
-
-    #     return np.arctan(grade_percent / 100.0)  # convert percent grade to radians (assuming small angles)
-    
-    # def get_headwind(self, distance) -> float:
-    #     """
-    #     Returns the headwind speed in m/s at a given distance along the course.
-    #     """
-    #     closest_idx = (self.df['distance_m'] - distance).abs().idxmin()
-    #     headwind = self.df.loc[closest_idx, 'headwind_mps']
-    #     return headwind
-    
-    # def get_wbgt(self) -> float:
-    #     """
-    #     Returns the Wet Bulb Globe Temperature (WBGT) based on the weather information.
-    #     This is a simplified calculation and can be expanded to include more factors.
-    #     """
-    #     temp_w = self.temp_d * np.arctan(0.151977*(self.humidity + 8.313659)**(1/2)) \
-    #         + np.arctan(self.temp_d + self.humidity) \
-    #         - np.arctan(self.humidity - 1.676331) \
-    #         + 0.00391838*(self.humidity)**(3/2) * np.arctan(0.023101 * self.humidity) \
-    #         - 4.686
-    #     temp_g = self.temp_d + (self.solar_radiation) / (self.convection*self.alpha)  # simplified effect of solar radiation on perceived temperature
-        
-    #     return 0.7*temp_w + 0.2*temp_g + 0.1*self.temp_d  # weighted average to get a single WBGT value
+from DataClasses import SimConfig, Params
+from dataclasses import asdict
 
 class MonteCarloSimulation:
-    def __init__(self, cfg: SimConfig, csv_data: str, json_data: str):
+    def __init__(self, cfg: SimConfig, params: Params, csv_data: str, json_data: str):
         self.target_dist = cfg.target_dist
         self.num_sim = cfg.num_sim
         self.dt = cfg.dt
@@ -101,24 +35,39 @@ class MonteCarloSimulation:
         self.solar_radiation = self.weather_info["solarradiation"]
 
         self.cfg = cfg 
-        # before we start, calculate the effective aerobic supply using the WBGT to adjust the sigma value based on the heat stress
-        self.cfg.sigma *= 1 - self.cfg.psi*max(0, self._get_wbgt() - 15)
-
+        self.params = params
+        # self.cfg.sigma *= 1 - self.cfg.psi*max(0, self._get_wbgt() - 15)
 
         self.g = 9.81  # gravitational acceleration (m/s^2)
 
-        # create a numpy array that contains the random distribution of the parameters for multiple simulations (currently hardcoding the ranges)
-        self.F_values = np.random.uniform(9.0, 12.0, self.num_sim)
-        self.E0_values = np.random.uniform(1800, 2600, self.num_sim)
-        self.tau_values = np.random.uniform(0.8, 1.2, self.num_sim)
-        self.sigma_values = np.random.uniform(35, 55, self.num_sim)
-        self.gamma_values = np.random.uniform(3e-5, 8e-5, self.num_sim)
+        # create a numpy array that contains the random distribution of the parameters for multiple simulations
+        for param, bounds in asdict(self.params).items():
+            # we make a very small adjustment
+            if len(bounds) == 1:
+                setattr(self, f"{param}_values", np.full(self.num_sim, bounds[0]))
+            
+            elif len(bounds) == 2:
+                setattr(self, f"{param}_values", np.random.uniform(bounds[0], bounds[1], self.num_sim))
+
+            else:
+                raise ValueError(f"Invalid bounds for parameter {param}: {bounds}")
+
+        # before we start, calculate the effective aerobic supply using the WBGT to adjust the sigma value based on the heat stress
+        self.sigma_values *= np.ones(self.num_sim) - self.psi_values*np.maximum(0, self._get_wbgt() - 15)  # adjust sigma for heat stress for each simulation
+        # add the k_values which is derived from the gamma values
         self.k_values = self.gamma_values*2
-        self.drag_coefficient_values = np.random.uniform(0.9, 1.1, self.num_sim)
-        self.frontal_area_values = np.random.uniform(0.4, 0.55, self.num_sim)
-        self.mass_values = np.random.uniform(60, 80, self.num_sim)
-        self.alpha_values = np.random.uniform(0.6, 0.8, self.num_sim)
-        self.psi_values = np.random.uniform(0.003, 0.007, self.num_sim)
+
+        # self.F_values = np.random.uniform(self.params.F[0], self.params.F[1], self.num_sim)
+        # self.E0_values = np.random.uniform(1800, 2600, self.num_sim)
+        # self.tau_values = np.random.uniform(0.8, 1.2, self.num_sim)
+        # self.sigma_values = np.random.uniform(35, 55, self.num_sim)
+        # self.gamma_values = np.random.uniform(3e-5, 8e-5, self.num_sim)
+        # self.k_values = self.gamma_values*2
+        # self.drag_coefficient_values = np.random.uniform(0.9, 1.1, self.num_sim)
+        # self.frontal_area_values = np.random.uniform(0.4, 0.55, self.num_sim)
+        # self.mass_values = np.random.uniform(60, 80, self.num_sim)
+        # self.alpha_values = np.random.uniform(0.6, 0.8, self.num_sim)
+        # self.psi_values = np.random.uniform(0.003, 0.007, self.num_sim)
 
         # create an array to store the results of multiple simulations
         self.velocity = np.full((self.max_steps, self.num_sim), np.nan)
@@ -127,6 +76,7 @@ class MonteCarloSimulation:
         self.distance_covered = np.full((self.max_steps, self.num_sim), np.nan)
         self.elevation_profile = np.full(self.max_steps, np.nan)
         self.headwind_profile = np.full(self.max_steps, np.nan)
+        self.finish_time = np.full(self.num_sim, np.nan)
 
         # update the first row with the initial conditions
         self.velocity[0] = np.zeros(self.num_sim)
@@ -137,15 +87,6 @@ class MonteCarloSimulation:
         self.headwind_profile[0] = 0.0
 
         self.active = np.ones(self.num_sim, dtype=bool)   # True = still running
-
-
-        # self.velocity = np.zeros((self.max_steps, self.num_sim))
-        # self.energy = self.E0_values.reshape(1, -1) * np.ones((self.max_steps, self.num_sim))
-        # self.time_elapsed = np.zeros(self.max_steps)
-        # self.distance_covered = np.zeros((self.max_steps, self.num_sim))
-        # self.elevation_profile = np.zeros(self.max_steps)
-        # self.headwind_profile = np.zeros(self.max_steps)
-        # self.active = np.ones(self.num_sim, dtype=bool)   # True = still running
 
         self.const_v = cfg.const_v if cfg.const_v is not None else self._constant_velocity()
         self.iteration = 0 
@@ -193,7 +134,7 @@ class MonteCarloSimulation:
 
         return headwind
     
-    def _get_wbgt(self) -> float:
+    def _get_wbgt(self) -> np.ndarray:
         """
         Returns the Wet Bulb Globe Temperature (WBGT) based on the weather information.
         This is a simplified calculation and can be expanded to include more factors.
@@ -203,7 +144,8 @@ class MonteCarloSimulation:
             - np.arctan(self.humidity - 1.676331) \
             + 0.00391838*(self.humidity)**(3/2) * np.arctan(0.023101 * self.humidity) \
             - 4.686
-        temp_g = self.temp_d + (self.solar_radiation) / (self.cfg.convection*self.cfg.alpha)  # simplified effect of solar radiation on perceived temperature
+        temp_g = self.temp_d + (self.solar_radiation) / (self.convection_values*self.alpha_values)  # simplified effect of solar radiation on perceived temperature
+        # temp_g = self.temp_d + (self.solar_radiation) / (self.cfg.convection*self.cfg.alpha)  # simplified effect of solar radiation on perceived temperature
         
         return 0.7*temp_w + 0.2*temp_g + 0.1*self.temp_d  # weighted average to get a single WBGT value
         
@@ -214,7 +156,7 @@ class MonteCarloSimulation:
         dv = self.F_values[mask] \
             - (1/self.tau_values[mask]) * self.velocity[self.iteration][mask] \
             - self.g*np.sin(theta[mask]) \
-            - (0.5*self.cfg.rho*self.drag_coefficient_values[mask] * self.frontal_area_values[mask] * (self.velocity[self.iteration][mask] + headwind[mask])**2) / self.mass_values[mask]
+            - (0.5*self.rho_values[mask]*self.drag_coefficient_values[mask] * self.frontal_area_values[mask] * (self.velocity[self.iteration][mask] + headwind[mask])**2) / self.mass_values[mask]
 
         self.velocity[self.iteration + 1][mask] = self.velocity[self.iteration][mask] + dv*self.dt
 
@@ -239,7 +181,7 @@ class MonteCarloSimulation:
         dE = self.sigma_values[mask] \
                 - self.const_v[mask]*(self.const_v[mask]/self.tau_values[mask] \
                     + self.g*np.sin(theta[mask]) \
-                    + (0.5*self.cfg.rho*self.drag_coefficient_values[mask]*self.frontal_area_values[mask]*(self.const_v[mask] + headwind[mask])**2)/self.mass_values[mask]) \
+                    + (0.5*self.rho_values[mask]*self.drag_coefficient_values[mask]*self.frontal_area_values[mask]*(self.const_v[mask] + headwind[mask])**2)/self.mass_values[mask]) \
                 - (self.k_values[mask]*self.const_v[mask]**2*self.time_elapsed[self.iteration])/self.tau_values[mask]
 
         self.energy[self.iteration + 1][mask] = self.energy[self.iteration][mask] + dE*self.dt
@@ -258,7 +200,7 @@ class MonteCarloSimulation:
         dv = self.sigma_values[mask]/self.velocity[self.iteration][mask] \
                 - (1/self.tau_values[mask]) * self.velocity[self.iteration][mask] \
                 - self.g*np.sin(theta[mask]) \
-                - (0.5*self.cfg.rho*self.drag_coefficient_values[mask]*self.frontal_area_values[mask]*(self.velocity[self.iteration][mask] + headwind[mask])**2)/self.mass_values[mask] \
+                - (0.5*self.rho_values[mask]*self.drag_coefficient_values[mask]*self.frontal_area_values[mask]*(self.velocity[self.iteration][mask] + headwind[mask])**2)/self.mass_values[mask] \
                 - (self.k_values[mask]*self.const_v[mask]**2*self.time_elapsed[self.iteration])/(self.tau_values[mask]*self.velocity[self.iteration][mask])
         
         self.velocity[self.iteration + 1][mask] = self.velocity[self.iteration][mask] + dv*self.dt
@@ -334,14 +276,12 @@ class MonteCarloSimulation:
         # self.distance_covered += self.velocity[-1] * self.dt
 
     
-    def loop(self) -> np.ndarray:
+    def loop(self) -> None:
         """
         Runs the simulation until the target distance is reached
         """
         # for now we will use a uniform random distribution
         np.random.seed(42)  # for reproducibility
-
-        finish_time = np.full(self.num_sim, np.nan)
 
         for step in range(self.max_steps-1):
             # print(self.velocity.shape)
@@ -352,8 +292,7 @@ class MonteCarloSimulation:
             self.active[just_finished] = False
 
             # determine finish time
-            finish_time[just_finished] = self.time_elapsed[step]
-
+            self.finish_time[just_finished] = self.time_elapsed[step]
 
             if not self.active.any():
                 break                            # all sims done → early exit
@@ -364,7 +303,39 @@ class MonteCarloSimulation:
 
             self.iteration = step + 1
 
-        return finish_time
+
+def spaghetti_plot(sim: MonteCarloSimulation):
+    """
+    This function plots all the results of the simulation (Note costs a lot of memory)
+    """
+    plt.figure(figsize=(12, 6))
+    plt.subplot(2, 1, 1)
+    plt.plot(sim.time_elapsed, sim.velocity, color="blue", alpha=0.05, label='Velocity (m/s)')
+    plt.title(f'Monte Carlo: {sim.num_sim} Simulations Runner Velocity Over Time')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Velocity (m/s)')
+    # plt.legend()
+    plt.subplot(2, 1, 2)
+    plt.plot(sim.time_elapsed, sim.energy, color="red", alpha=0.05, label='Energy (J)')
+    plt.title(f'Monte Carlo: {sim.num_sim} Simulations Runner Energy Over Time')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Energy (J)')
+    # plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+def histogram_plot(sim: MonteCarloSimulation):
+    """
+    This function plots a histogram of the finish times of the simulations.
+    """
+    plt.figure(figsize=(10, 6))
+    plt.hist(sim.finish_time, bins=30, color='green', alpha=0.7)
+    plt.title('Distribution of Finish Times')
+    plt.xlabel('Finish Time (s)')
+    plt.ylabel('Frequency')
+    plt.grid(True)
+    plt.show()
+
 
 if __name__ == "__main__":
 
@@ -372,51 +343,49 @@ if __name__ == "__main__":
     json_data="runs/2025-10-10_10-42/2025-10-10_10-42_overall.json"
     # print(terrain.df.head())  # check the terrain data
 
-    sim = MonteCarloSimulation(SimConfig(
-        target_dist=4300,
-        num_sim=5,
-        dt=0.1,
-        max_steps=10000,
-        const_v=None,
-        t1=None,
-        t2=None,
-        F=10.5,
-        E0=2200.0,
-        tau=1.0,
-        sigma=45.0,
-        gamma=5.0e-5,
-        drag_coefficient=1.0,
-        frontal_area=0.47,
-        mass=70.0,
-        rho=1.225,
-        convection=10.0,
-        alpha=0.7,
-        psi=0.005
-    ), csv_data=csv_data, json_data=json_data)
+    sim = MonteCarloSimulation(
+        SimConfig(
+            target_dist=4300,
+            num_sim=1000,
+            dt=0.1,
+            max_steps=10000,
+            const_v=None,
+            t1=None,
+            t2=None
+        ),
+        Params(
+            F=[9.0, 12.0],
+            E0=[1800.0, 2600.0],
+            tau=[0.8, 1.2],
+            sigma=[35.0, 55.0],
+            gamma=[3e-5, 8e-5],
+            drag_coefficient=[0.9, 1.1],
+            frontal_area=[0.4, 0.55],
+            mass=[60.0, 80.0],
+            rho=[1.225],
+            convection=[10.0],
+            alpha=[0.6, 0.8],
+            psi=[0.003, 0.007]
+            # F=10.5,
+            # E0=2200.0,
+            # tau=1.0,
+            # sigma=45.0,
+            # gamma=5.0e-5,
+            # drag_coefficient=1.0,
+            # frontal_area=0.47,
+            # mass=70.0,
+            # rho=1.225,
+            # convection=10.0,
+            # alpha=0.7,
+            # psi=0.005
+        ), csv_data=csv_data, json_data=json_data)
 
     # perform the simulation
-    finished_time = sim.loop()
-
-    # print(sim.velocity[:, 0])
-    # print(finished_time)
+    sim.loop()
 
     # plotting results
-    sim_val = 2
-    plt.figure(figsize=(12, 6))
-    plt.subplot(2, 1, 1)
-    plt.plot(sim.time_elapsed, sim.velocity[:, sim_val], label='Velocity (m/s)')
-    plt.title('Runner Velocity Over Time')
-    plt.xlabel('Time (s)')
-    plt.ylabel('Velocity (m/s)')
-    plt.legend()
-    plt.subplot(2, 1, 2)
-    plt.plot(sim.time_elapsed, sim.energy[:, sim_val], label='Energy (J)')
-    plt.title('Runner Energy Over Time')
-    plt.xlabel('Time (s)')
-    plt.ylabel('Energy (J)')
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
+    # spaghetti_plot(sim)
+    histogram_plot(sim)
 
     # # plotting distance covered
     # plt.figure(figsize=(12, 4))
