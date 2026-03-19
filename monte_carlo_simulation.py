@@ -16,7 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import json
-from DataClasses import SimConfig, Params
+from data_classes import SimConfig, Params
 from dataclasses import asdict
 
 class MonteCarloSimulation:
@@ -145,7 +145,6 @@ class MonteCarloSimulation:
             + 0.00391838*(self.humidity)**(3/2) * np.arctan(0.023101 * self.humidity) \
             - 4.686
         temp_g = self.temp_d + (self.solar_radiation) / (self.convection_values*self.alpha_values)  # simplified effect of solar radiation on perceived temperature
-        # temp_g = self.temp_d + (self.solar_radiation) / (self.cfg.convection*self.cfg.alpha)  # simplified effect of solar radiation on perceived temperature
         
         return 0.7*temp_w + 0.2*temp_g + 0.1*self.temp_d  # weighted average to get a single WBGT value
         
@@ -163,14 +162,6 @@ class MonteCarloSimulation:
         dE = self.sigma_values[mask] - self.F_values[mask]*self.velocity[self.iteration][mask]
 
         self.energy[self.iteration + 1][mask] = self.energy[self.iteration][mask] + dE*self.dt
-        # self.energy[self.iteration + 1] = self.energy[self.iteration] + (dE if dE < 0 else 0)*self.dt
-        # self.velocity.append(self.velocity[-1] \
-        #                         + (self.F         \
-        #                             - (1/self.tau) * self.velocity[-1] \
-        #                             - self.g*np.sin(theta) \
-        #                             - (0.5*self.rho*self.cd*self.area*(self.velocity[-1] + headwind)**2)/self.mass)*self.dt)
-        # energy_change = (self.sigma - self.F*self.velocity[-1])*self.dt
-        # self.energy.append(self.energy[-1] + (energy_change if energy_change < 0 else 0))
 
     def phase_2(self, theta:np.ndarray, headwind:np.ndarray, mask:np.ndarray) -> None:
         """
@@ -185,13 +176,6 @@ class MonteCarloSimulation:
                 - (self.k_values[mask]*self.const_v[mask]**2*self.time_elapsed[self.iteration])/self.tau_values[mask]
 
         self.energy[self.iteration + 1][mask] = self.energy[self.iteration][mask] + dE*self.dt
-        # self.velocity.append(self.const_v)
-        # self.energy.append(self.energy[-1] \
-        #                         + (self.sigma \
-        #                              - self.const_v*(self.const_v/self.tau \
-        #                                     + self.g*np.sin(theta) \
-        #                                     + (0.5*self.rho*self.cd*self.area*(self.const_v + headwind)**2)/self.mass) \
-        #                         - (self.k*self.const_v**2*self.time_elapsed[-1])/self.tau)*self.dt)
 
     def phase_3(self, theta:np.ndarray, headwind:np.ndarray, mask:np.ndarray) -> None:
         """
@@ -206,13 +190,6 @@ class MonteCarloSimulation:
         self.velocity[self.iteration + 1][mask] = self.velocity[self.iteration][mask] + dv*self.dt
 
         self.energy[self.iteration + 1][mask] = np.zeros(self.num_sim)[mask]
-        # self.velocity.append(self.velocity[-1] \
-        #                         +  (self.sigma/self.velocity[-1] \
-        #                         - (1/self.tau)*self.velocity[-1] \
-        #                         - self.g*np.sin(theta) \
-        #                         - (0.5*self.rho*self.cd*self.area*(self.velocity[-1] + headwind)**2)/self.mass \
-        #                         - (self.k*self.const_v**2*self.time_elapsed[-1])/(self.tau*self.velocity[-1]))*self.dt)
-        # self.energy.append(0.0)
     
     def step(self):
         """
@@ -249,32 +226,6 @@ class MonteCarloSimulation:
         # phase 3
         if m3.any():
             self.phase_3(theta, headwind, m3)
-
-        # if self.time_phase:
-        #     if self.time_elapsed[-1] < self.t1:
-        #         self.phase_1(theta, headwind)
-        #     elif self.t1 <= self.time_elapsed[-1] < self.t2:
-        #         self.phase_2(theta, headwind)
-        #     else:
-        #         self.phase_3(theta, headwind)
-        # else:  
-        #     # determine which phase we are in based on certain factors
-        #     if self.velocity[-1] < self.const_v and self.energy[-1] > 0: # if we havent reached the constant velocity yet, we are in phase 1
-        #         self.phase_1(theta, headwind)
-        #     elif self.velocity[-1] >= self.const_v and self.energy[-1] > 0: # if we have reached the constant velocity and still have energy, we are in phase 2
-        #         self.t1 = self.time_elapsed[-1] if self.t1 is None else self.t1
-        #         self.phase_2(theta, headwind)
-        #     elif self.energy[-1] <= 0: # if we have no energy left, we are in phase 3
-        #         self.t2 = self.time_elapsed[-1] if self.t2 is None else self.t2
-        #         self.phase_3(theta, headwind)
-
-        #     else:
-        #         raise ValueError("Invalid state: velocity and energy values do not correspond to any phase.")
-
-        # # now update the time and distance covered
-        # self.time_elapsed.append(self.time_elapsed[-1] + self.dt)
-        # self.distance_covered += self.velocity[-1] * self.dt
-
     
     def loop(self) -> None:
         """

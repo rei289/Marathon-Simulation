@@ -1,9 +1,9 @@
 """
 This is the main file for retrieving Strava and Visual Crossing data for marathon simulations.
 """
-from API.Strava import StravaDataRetriever
-from API.VisualCrossing import VisualCrossingDataRetriever
-from DataScience.ProcessData import DataProcessor
+from process_runs.api.strava import StravaDataRetriever
+from process_runs.api.visual_crossing import VisualCrossingDataRetriever
+from process_runs.process_data import DataProcessor
 from utilis.helper import extract_global_json
 import json
 import csv
