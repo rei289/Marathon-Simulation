@@ -21,7 +21,7 @@ from dataclasses import asdict
 
 # TODO: change the input parameters from bounds to a numpy array of samples to allow for more flexible sampling methods (e.g. LHS, Sobol, etc.)
 class MonteCarloSimulation:
-    def __init__(self, cfg: SimConfig, params: Params, csv_data: str|None, json_data: str|None):
+    def __init__(self, cfg: SimConfig, df_input: pd.DataFrame, csv_data: str|None, json_data: str|None):
         self.target_dist = cfg.target_dist
         self.num_sim = cfg.num_sim
         self.dt = cfg.dt
@@ -40,21 +40,25 @@ class MonteCarloSimulation:
         self.solar_radiation = self.weather_info["solarradiation"]
 
         self.cfg = cfg 
-        self.params = params
+        # self.params = params
 
         self.g = 9.81  # gravitational acceleration (m/s^2)
 
-        # create a numpy array that contains the random distribution of the parameters for multiple simulations
-        for param, bounds in asdict(self.params).items():
-            # we make a very small adjustment
-            if len(bounds) == 1:
-                setattr(self, f"{param}_values", np.full(self.num_sim, bounds[0]))
+        # # create a numpy array that contains the random distribution of the parameters for multiple simulations
+        # for param, bounds in asdict(self.params).items():
+        #     # we make a very small adjustment
+        #     if len(bounds) == 1:
+        #         setattr(self, f"{param}_values", np.full(self.num_sim, bounds[0]))
             
-            elif len(bounds) == 2:
-                setattr(self, f"{param}_values", np.random.uniform(bounds[0], bounds[1], self.num_sim))
+        #     elif len(bounds) == 2:
+        #         setattr(self, f"{param}_values", np.random.uniform(bounds[0], bounds[1], self.num_sim))
 
-            else:
-                raise ValueError(f"Invalid bounds for parameter {param}: {bounds}")
+        #     else:
+        #         raise ValueError(f"Invalid bounds for parameter {param}: {bounds}")
+
+        # get the parameter values from the input dataframe
+        for input_var in df_input.columns:
+            setattr(self, f"{input_var}_values", df_input[input_var].values)
 
         # before we start, calculate the effective aerobic supply using the WBGT to adjust the sigma value based on the heat stress
         self.sigma_values *= np.ones(self.num_sim) - self.psi_values*np.maximum(0, self._get_wbgt() - 15)  # adjust sigma for heat stress for each simulation
@@ -245,6 +249,25 @@ class MonteCarloSimulation:
             self.distance_covered[step + 1] = self.distance_covered[step] + np.where(self.active, self.velocity[step] * self.dt, 0.0)
 
             self.iteration = step + 1
+
+def create_dataframes(params: Params, num_sample: int) -> pd.DataFrame:
+    """
+    Use to create input dataframe which can then be used to run the simulation
+    """
+    # create a numpy array that contains the random distribution of the parameters for multiple simulations
+    df = pd.DataFrame()
+    for param, bounds in asdict(params).items():
+        # we make a very small adjustment
+        if len(bounds) == 1:
+            df[param] = np.full(num_sample, bounds[0])
+        
+        elif len(bounds) == 2:
+            df[param] = np.random.uniform(bounds[0], bounds[1], num_sample)
+
+        else:
+            raise ValueError(f"Invalid bounds for parameter {param}: {bounds}")
+
+    return df
 
 
 def spaghetti_plot(sim: MonteCarloSimulation):
