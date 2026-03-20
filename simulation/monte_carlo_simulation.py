@@ -16,19 +16,24 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import json
-from data_classes import SimConfig, Params
+from simulation.data_classes import SimConfig, Params
 from dataclasses import asdict
 
+# TODO: change the input parameters from bounds to a numpy array of samples to allow for more flexible sampling methods (e.g. LHS, Sobol, etc.)
 class MonteCarloSimulation:
-    def __init__(self, cfg: SimConfig, params: Params, csv_data: str, json_data: str):
+    def __init__(self, cfg: SimConfig, params: Params, csv_data: str|None, json_data: str|None):
         self.target_dist = cfg.target_dist
         self.num_sim = cfg.num_sim
         self.dt = cfg.dt
         self.max_steps = cfg.max_steps
 
-        self.df = pd.read_csv(csv_data)[['distance_m', 'grade_percent', 'headwind_mps']].fillna(0)
-        with open(json_data, 'r') as f:
-            self.weather_info = json.load(f)["weather"]
+        self.df = pd.read_csv(csv_data)[['distance_m', 'grade_percent', 'headwind_mps']].fillna(0) if csv_data is not None else pd.DataFrame({"distance_m": [0], "grade_percent": [0], "headwind_mps": [0]})
+        
+        if json_data is not None:
+            with open(json_data, 'r') as f:
+                self.weather_info = json.load(f)["weather"]
+        else:
+                self.weather_info = {"temp": 20.0, "humidity": 50.0, "solarradiation": 50.0}  # default weather conditions
 
         self.temp_d = self.weather_info["temp"]
         self.humidity = self.weather_info["humidity"]
@@ -36,7 +41,6 @@ class MonteCarloSimulation:
 
         self.cfg = cfg 
         self.params = params
-        # self.cfg.sigma *= 1 - self.cfg.psi*max(0, self._get_wbgt() - 15)
 
         self.g = 9.81  # gravitational acceleration (m/s^2)
 
@@ -56,18 +60,6 @@ class MonteCarloSimulation:
         self.sigma_values *= np.ones(self.num_sim) - self.psi_values*np.maximum(0, self._get_wbgt() - 15)  # adjust sigma for heat stress for each simulation
         # add the k_values which is derived from the gamma values
         self.k_values = self.gamma_values*2
-
-        # self.F_values = np.random.uniform(self.params.F[0], self.params.F[1], self.num_sim)
-        # self.E0_values = np.random.uniform(1800, 2600, self.num_sim)
-        # self.tau_values = np.random.uniform(0.8, 1.2, self.num_sim)
-        # self.sigma_values = np.random.uniform(35, 55, self.num_sim)
-        # self.gamma_values = np.random.uniform(3e-5, 8e-5, self.num_sim)
-        # self.k_values = self.gamma_values*2
-        # self.drag_coefficient_values = np.random.uniform(0.9, 1.1, self.num_sim)
-        # self.frontal_area_values = np.random.uniform(0.4, 0.55, self.num_sim)
-        # self.mass_values = np.random.uniform(60, 80, self.num_sim)
-        # self.alpha_values = np.random.uniform(0.6, 0.8, self.num_sim)
-        # self.psi_values = np.random.uniform(0.003, 0.007, self.num_sim)
 
         # create an array to store the results of multiple simulations
         self.velocity = np.full((self.max_steps, self.num_sim), np.nan)

@@ -2,9 +2,9 @@
 This is the main file for retrieving data and running the marathon simulation.
 """
 from process_runs.run_retriever import retrieve_run
-from data_classes import SimConfig, Params
+from simulation.data_classes import SimConfig, Params
 from utilis.helper import extract_global_json
-from monte_carlo_simulation import MonteCarloSimulation, spaghetti_plot, histogram_plot
+from simulation.monte_carlo_simulation import MonteCarloSimulation, spaghetti_plot, histogram_plot
 
 
 
