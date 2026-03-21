@@ -19,7 +19,7 @@ import json
 from simulation.data_classes import SimConfig, Params
 from dataclasses import asdict
 
-# TODO: change the input parameters from bounds to a numpy array of samples to allow for more flexible sampling methods (e.g. LHS, Sobol, etc.)
+# TODO: make monte carlo simulation into 1 phase rather than 3 separate functions, and use controller logic to determine pacing strategy
 class MonteCarloSimulation:
     def __init__(self, cfg: SimConfig, df_input: pd.DataFrame, csv_data: str|None, json_data: str|None):
         self.target_dist = cfg.target_dist
@@ -40,21 +40,8 @@ class MonteCarloSimulation:
         self.solar_radiation = self.weather_info["solarradiation"]
 
         self.cfg = cfg 
-        # self.params = params
 
         self.g = 9.81  # gravitational acceleration (m/s^2)
-
-        # # create a numpy array that contains the random distribution of the parameters for multiple simulations
-        # for param, bounds in asdict(self.params).items():
-        #     # we make a very small adjustment
-        #     if len(bounds) == 1:
-        #         setattr(self, f"{param}_values", np.full(self.num_sim, bounds[0]))
-            
-        #     elif len(bounds) == 2:
-        #         setattr(self, f"{param}_values", np.random.uniform(bounds[0], bounds[1], self.num_sim))
-
-        #     else:
-        #         raise ValueError(f"Invalid bounds for parameter {param}: {bounds}")
 
         # get the parameter values from the input dataframe
         for input_var in df_input.columns:
@@ -192,9 +179,6 @@ class MonteCarloSimulation:
         Runs one step of the simulation, updating the runner's velocity, energy, and distance based on the current phase of the run.
         """
         # determine the current terrain conditions based on the distance covered
-        # print(self.distance_covered[self.iteration])
-
-
         theta = self._get_grade(self.distance_covered[self.iteration])
         headwind = self._get_headwind(self.distance_covered[self.iteration])
 
