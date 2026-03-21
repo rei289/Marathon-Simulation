@@ -1,16 +1,16 @@
 """
 This is the main file for retrieving Strava and Visual Crossing data for marathon simulations.
 """
-from API.Strava import StravaDataRetriever
-from API.VisualCrossing import VisualCrossingDataRetriever
-from DataScience.ProcessData import DataProcessor
+from process_runs.api.strava import StravaDataRetriever
+from process_runs.api.visual_crossing import VisualCrossingDataRetriever
+from process_runs.process_data import DataProcessor
 from utilis.helper import extract_global_json
 import json
 import csv
 import os
 from dateutil import parser
 
-def main(num_runs: int = 10, output_folder: str = "data"):
+def retrieve_run(num_runs: int = 10, output_folder: str = "data"):
     """
     Main function to retrieve data from Strava and Visual Crossing.
     """
@@ -80,11 +80,3 @@ def main(num_runs: int = 10, output_folder: str = "data"):
         # save_to_csv(csv_data, os.path.join(output_folder, run_folder), csv_filename)
 
     print("\n✅ Done saving all running data!")
-
-
-if __name__ == "__main__":
-    # Load configuration from globals.json
-    num_runs = extract_global_json("num_runs")
-    output_folder = extract_global_json("output_folder")
-    # Run the main function
-    main(num_runs, output_folder)

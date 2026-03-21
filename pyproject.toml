@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "marathon_simulation"
+version = "0.1.0"
+
+[tool.setuptools]
+# This tells setuptools to automatically find all packages and sub-packages
+packages = { find = { where = ["."], include = ["*"] } }

@@ -4,5 +4,7 @@ app_icon.png
 /data
 /runs
 __pycache__/
-/archive
+/_archive
 /model_coefficients.json
+marathon_simulation.egg-info/
+/sensitivity/plots/
