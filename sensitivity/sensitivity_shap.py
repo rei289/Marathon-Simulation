@@ -1,6 +1,8 @@
 """
 Use to run SHAP sensitivity analysis on the model
 """
+import pandas as pd
+
 import shap
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
@@ -34,6 +36,29 @@ def generate_lhs_samples(n_samples: int, dimensions: int, variable_bounds: dict)
     
     return scaled_samples
 
+def run_shap_analysis(X: pd.DataFrame, y: np.ndarray):
+    """
+    Runs SHAP analysis on the given input features and target variable.
+    
+    :param X: Input features as a NumPy array
+    :param y: Target variable as a NumPy array
+    """
+    # split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    # train a Random Forest regressor on the training data
+    model = RandomForestRegressor(n_estimators=100, random_state=42)
+    model.fit(X_train, y_train)
+    
+    # create a SHAP explainer for the trained model
+    explainer = shap.Explainer(model, X_train)
+    
+    # calculate SHAP values for the test set
+    shap_values = explainer(X_test)
+    
+    # visualize the SHAP values (e.g., summary plot)
+    shap.summary_plot(shap_values, X_test)
+
 if __name__ == "__main__":
     # generate test samples using LHS
     variable_bounds = {
@@ -50,7 +75,18 @@ if __name__ == "__main__":
         "alpha": [0.6, 0.8],
         "psi": [0.003, 0.007]
     }
-    n_samples = 1000
+    n_samples = 10000
     X = generate_lhs_samples(n_samples, len(variable_bounds), variable_bounds)
-    y = []
-    print(X.shape)
+
+    # convert the scaled samples to a DataFrame with appropriate column names
+    df_input = pd.DataFrame(X, columns=variable_bounds.keys())
+
+    # run the simulation for each sample and collect the outputs
+    sim = MonteCarloSimulation(SimConfig(target_dist=4300, num_sim=n_samples, dt=0.1, max_steps=10000), df_input, csv_data=None, json_data=None)
+
+    sim.loop()
+
+    y = sim.finish_time  # run the simulation for each sample and collect the outputs
+
+    # run SHAP analysis on the collected data
+    run_shap_analysis(df_input, y)
