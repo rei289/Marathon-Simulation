@@ -12,9 +12,9 @@ class SimConfig:
     dt: float
     max_steps: int
 
-    const_v: np.ndarray|None
-    t1: float|None
-    t2: float|None
+    const_v: np.ndarray|None = None
+    t1: float|None = None
+    t2: float|None = None
 
 @dataclass
 class Params:

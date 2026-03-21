@@ -7,3 +7,4 @@ __pycache__/
 /_archive
 /model_coefficients.json
 marathon_simulation.egg-info/
+/sensitivity/plots/
