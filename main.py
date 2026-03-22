@@ -1,9 +1,12 @@
 """
 This is the main file for retrieving data and running the marathon simulation.
 """
-from simulation.data_classes import SimConfig, Params
-from simulation.monte_carlo_simulation import MonteCarloSimulation, create_dataframes, spaghetti_plot
-
+from simulation.data_classes import Params, SimConfig
+from simulation.monte_carlo_simulation import (
+    MonteCarloSimulation,
+    create_dataframes,
+    spaghetti_plot,
+)
 
 params = Params(
     F=[9.0, 12.0],
@@ -56,7 +59,7 @@ if __name__ == "__main__":
     sim = MonteCarloSimulation(sim_cfg, df_input=df_input, csv_data=csv_data, json_data=json_data)
 
     # perform the simulation
-    sim.loop()
+    sim.run()
 
     # plotting results
     spaghetti_plot(sim)

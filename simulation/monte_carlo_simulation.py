@@ -12,12 +12,15 @@ In addition to the Kellner model, this simulation incorporates:
     - Heat stress which reduces the effective aerobic power supply (sigma) based on the Wet Bulb Globe Temperature (WBGT)
 """
 
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
 import json
-from simulation.data_classes import SimConfig, Params
 from dataclasses import asdict
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+from simulation.data_classes import Params, SimConfig
+
 
 # TODO: make monte carlo simulation into 1 phase rather than 3 separate functions, and use controller logic to determine pacing strategy
 class MonteCarloSimulation:
@@ -62,7 +65,7 @@ class MonteCarloSimulation:
         self.finish_time = np.full(self.num_sim, np.nan)
 
         # update the first row with the initial conditions
-        self.velocity[0] = np.zeros(self.num_sim)
+        self.velocity[0] = np.full(self.num_sim, 1e-8)  # start with a very small velocity to avoid division by zero
         self.energy[0] = self.E0_values
         self.time_elapsed[0] = 0.0
         self.distance_covered[0] = np.zeros(self.num_sim)
@@ -197,8 +200,9 @@ class MonteCarloSimulation:
         dE = np.where(self.energy[self.iteration] > 0, self.sigma_values - (f_desired + f_resistance)*self.velocity[self.iteration] - (self.k_values*self.velocity[self.iteration]**2*self.time_elapsed[self.iteration])/self.tau_values, 0)
 
         # update velocity and energy for the next iteration
-        self.velocity[self.iteration + 1] = self.velocity[self.iteration] + dv*self.dt
-        self.energy[self.iteration + 1] = self.energy[self.iteration] + dE*self.dt
+        # self.velocity[self.iteration + 1] = self.velocity[self.iteration] + dv*self.dt
+        self.velocity[self.iteration + 1] = np.maximum(0.0, self.velocity[self.iteration] + dv*self.dt) # velocity cannot be negative
+        self.energy[self.iteration + 1] = np.clip(self.energy[self.iteration] + dE*self.dt, 0.0, self.E0_values) # energy cannot be negative or exceed initial energy
     
     def step(self):
         """
@@ -238,7 +242,7 @@ class MonteCarloSimulation:
         # if m3.any():
         #     self.phase_3(theta, headwind, m3)
     
-    def loop(self) -> None:
+    def run(self) -> None:
         """
         Runs the simulation until the target distance is reached
         """

@@ -1,16 +1,15 @@
 """
 Use to run SHAP sensitivity analysis on the model
 """
+import numpy as np
 import pandas as pd
-
 import shap
+from scipy.stats import qmc
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
-from scipy.stats import qmc
-import numpy as np
 
-from simulation.monte_carlo_simulation import MonteCarloSimulation
 from simulation.data_classes import SimConfig
+from simulation.monte_carlo_simulation import MonteCarloSimulation
 
 
 def generate_lhs_samples(n_samples: int, dimensions: int, variable_bounds: dict) -> np.ndarray:
@@ -84,7 +83,7 @@ if __name__ == "__main__":
     # run the simulation for each sample and collect the outputs
     sim = MonteCarloSimulation(SimConfig(target_dist=4300, num_sim=n_samples, dt=0.1, max_steps=10000), df_input, csv_data=None, json_data=None)
 
-    sim.loop()
+    sim.run()
 
     y = sim.finish_time  # run the simulation for each sample and collect the outputs
 
