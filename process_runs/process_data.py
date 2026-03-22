@@ -142,7 +142,7 @@ class DataProcessor:
 
         # calculate the relative wind direction
         self.csv_data["relative_winddir_degree"] = (self.csv_data["winddir_degree"] - self.csv_data["athletedir_degree"]) % 360
-        self.csv_data["headwind_mps"] = self.csv_data["windspeed_mps"] * np.cos(np.radians(self.csv_data["relative_winddir_degree"]))
+        self.csv_data["headwind_mps"] = self.csv_data["windspeed_mps"] * np.cos(np.radians(self.csv_data["relative_winddir_degree"])) # Positive for headwind, negative for tailwind
         self.csv_data["crosswind_mps"] = self.csv_data["windspeed_mps"] * np.sin(np.radians(self.csv_data["relative_winddir_degree"]))
 
         # delete the temporary columns

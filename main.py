@@ -1,4 +1,6 @@
 """Main file for retrieving data and running the marathon simulation."""
+import numpy as np
+
 from simulation.data_classes import Params, SimConfig
 from simulation.monte_carlo_simulation import (
     MonteCarloSimulation,
@@ -7,13 +9,13 @@ from simulation.monte_carlo_simulation import (
     histogram_plot,
     spaghetti_plot,
 )
-from simulation.pacing_strategy import ConstantPaceStrategy
+from simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy
 
 params = Params(
     F=[9.0, 12.0],
     E0=[1800.0, 2600.0],
     tau=[0.8, 1.2],
-    sigma=[35.0, 55.0],
+    sigma=[20.0, 35.0],
     gamma=[3e-5, 8e-5],
     drag_coefficient=[0.9, 1.1],
     frontal_area=[0.4, 0.55],
@@ -26,7 +28,7 @@ params = Params(
 
 sim_cfg = SimConfig(
     target_dist=4300,
-    num_sim=10,
+    num_sim=100,
     dt=0.1,
     max_steps=20000,
     const_v=5.0,
@@ -35,6 +37,7 @@ sim_cfg = SimConfig(
 )
 
 strat = ConstantPaceStrategy(sim_cfg)
+# strat = EvenEffortStrategy(sim_cfg)
 
 
 if __name__ == "__main__":
@@ -52,8 +55,10 @@ if __name__ == "__main__":
     # get input dataframe for the simulation
     df_input = create_dataframes(params, sim_cfg.num_sim)
 
-    csv_data="runs/2025-10-10_10-42/2025-10-10_10-42_streams.csv"
-    json_data="runs/2025-10-10_10-42/2025-10-10_10-42_overall.json"
+    # csv_data="runs/2025-10-10_10-42/2025-10-10_10-42_streams.csv"
+    # json_data="runs/2025-10-10_10-42/2025-10-10_10-42_overall.json"
+    csv_data=None
+    json_data=None
 
     sim = MonteCarloSimulation(sim_cfg, strat, df_input=df_input, csv_data=csv_data, json_data=json_data)
 
@@ -61,7 +66,8 @@ if __name__ == "__main__":
     sim.run()
 
     # print results
-    print(f"Finish times (s): {sim.finish_time}")
+    print(f"Average finish time (s): {np.mean(sim.finish_time)}")
+    print(f"Finish times (s): {sim.finish_time} seconds")
 
     # plotting results
     spaghetti_plot(sim)

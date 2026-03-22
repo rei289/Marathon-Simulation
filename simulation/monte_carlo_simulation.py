@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from simulation.data_classes import Params, SimConfig
-from simulation.pacing_strategy import PacingStrategy
+from simulation.pacing_strategy import PacingContext, PacingStrategy
 
 
 class MonteCarloSimulation:
@@ -48,6 +48,7 @@ class MonteCarloSimulation:
 
         self.cfg = cfg
         self.strat = strat
+        print(f"Running Monte Carlo Simulation with strategy: {self.strat.pace_type} and {self.num_sim} simulations.")
 
         self.g = 9.81  # gravitational acceleration (m/s^2)
 
@@ -169,13 +170,25 @@ class MonteCarloSimulation:
         self.headwind_profile[self.iteration] = headwind[0]
 
         # now we calculate the new velocity and energy based on controller logic which determines the target velocity
-        v_target = self.strat.get_target_velocity()
+        v_target = self.strat.get_target_velocity(ctx=PacingContext(
+            dt=self.dt,
+            velocity=self.velocity[self.iteration],
+            energy=self.energy[self.iteration],
+            theta=theta,
+            headwind=headwind,
+            tau=self.tau_values,
+            mass=self.mass_values,
+            rho=self.rho_values,
+            drag_coefficient=self.drag_coefficient_values,
+            frontal_area=self.frontal_area_values,
+            f_max=self.F_values,
+            g=self.g,
+        ))
         self.math_model(v_target, theta, headwind)
 
     def run(self) -> None:
         """Use to run the simulation until the target distance is reached."""
-        # for now we will use a uniform random distribution
-
+        # loop through each time step until we reach the target distance or exceed max steps
         for step in range(self.max_steps-1):
             self.step()
 
