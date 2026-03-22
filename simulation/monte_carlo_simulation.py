@@ -56,7 +56,7 @@ class MonteCarloSimulation:
             setattr(self, f"{input_var}_values", df_input[input_var].values)
 
         # before we start, calculate the effective aerobic supply using the WBGT to adjust the sigma value based on the heat stress
-        self.sigma_values *= np.ones(self.num_sim) - self.psi_values*np.maximum(0, self._get_wbgt() - 15)  # adjust sigma for heat stress for each simulation
+        self.sigma_values *= np.ones(self.num_sim) - self.psi_values*np.maximum(0, self._get_wbgt() - 15)  # adjust sigma for heat stress
         # add the k_values which is derived from the gamma values
         self.k_values = self.gamma_values*2
 
@@ -80,7 +80,7 @@ class MonteCarloSimulation:
         self.active = np.ones(self.num_sim, dtype=bool)   # True = still running
 
         self.const_v = cfg.const_v if cfg.const_v is not None else self._constant_velocity()
-        self.iteration = 0 
+        self.iteration = 0
 
     def _constant_velocity(self) -> np.ndarray:
         """Use to calculate the constant velocity during phase 2 based on the model equations."""
@@ -127,33 +127,36 @@ class MonteCarloSimulation:
             - np.arctan(self.humidity - 1.676331) \
             + 0.00391838*(self.humidity)**(3/2) * np.arctan(0.023101 * self.humidity) \
             - 4.686
-        temp_g = self.temp_d + (self.solar_radiation) / (self.convection_values*self.alpha_values)  # simplified effect of solar radiation on perceived temperature
+        temp_g = self.temp_d + (self.solar_radiation) / (self.convection_values*self.alpha_values)  # effect of radiation on perceived temperature
 
         return 0.7*temp_w + 0.2*temp_g + 0.1*self.temp_d  # weighted average to get a single WBGT value
 
     def math_model(self, v_target: np.ndarray, theta:np.ndarray, headwind:np.ndarray) -> None:
         """Use to provide the equation logic for the simulation, incorporating the effects of terrain and weather on the runner's performance."""
         # calculate all the resistive forces
-        # f_resistance = (1/self.tau_values) * self.velocity[self.iteration] + self.g*np.sin(theta) + (0.5*self.rho_values*self.drag_coefficient_values*self.frontal_area_values*(self.velocity[self.iteration] + headwind)**2)/self.mass_values
-        f_resistance = self.g*np.sin(theta) + (0.5*self.rho_values*self.drag_coefficient_values*self.frontal_area_values*(self.velocity[self.iteration] + headwind)**2)/self.mass_values
+        f_resistance = self.g*np.sin(theta) \
+        + (0.5*self.rho_values*self.drag_coefficient_values*self.frontal_area_values*(self.velocity[self.iteration] + headwind)**2)/self.mass_values
+
         # calculate amount of force we would like to apply to reach the target velocity, not accounting for resistive forces
         f_desired = (v_target - self.velocity[self.iteration])/self.dt
-
         # calculate the actual force applied by the runner, which is limited by the maximum thrust
         f_desired = np.minimum(self.F_values, f_desired)
 
         # check if the runner has enough energy to apply the actual force
-        f_desired = np.where(self.energy[self.iteration] > 0, f_desired, (self.sigma_values - (self.k_values*self.velocity[self.iteration]**2*self.time_elapsed[self.iteration])/self.tau_values)/self.velocity[self.iteration])
+        f_desired = np.where(self.energy[self.iteration] > 0, f_desired, \
+                (self.sigma_values \
+                - (self.k_values*self.velocity[self.iteration]**2*self.time_elapsed[self.iteration])/self.tau_values)/self.velocity[self.iteration])
 
         # calculate the change in velocity and energy based on the actual force applied
-        # dv = f_desired - f_resistance
         dv = f_desired - f_resistance - (1/self.tau_values) * self.velocity[self.iteration]
-        dE = np.where(self.energy[self.iteration] > 0, self.sigma_values - (f_desired + f_resistance)*self.velocity[self.iteration] - (self.k_values*self.velocity[self.iteration]**2*self.time_elapsed[self.iteration])/self.tau_values, 0)
+        de = np.where(self.energy[self.iteration] > 0, \
+                      self.sigma_values \
+                      - (f_desired + f_resistance)*self.velocity[self.iteration] \
+                      - (self.k_values*self.velocity[self.iteration]**2*self.time_elapsed[self.iteration])/self.tau_values, 0)
 
         # update velocity and energy for the next iteration
-        # self.velocity[self.iteration + 1] = self.velocity[self.iteration] + dv*self.dt
         self.velocity[self.iteration + 1] = np.maximum(0.0, self.velocity[self.iteration] + dv*self.dt) # velocity cannot be negative
-        self.energy[self.iteration + 1] = np.clip(self.energy[self.iteration] + dE*self.dt, 0.0, self.E0_values) # energy cannot be negative or exceed initial energy
+        self.energy[self.iteration + 1] = np.clip(self.energy[self.iteration] + de*self.dt, 0.0, self.E0_values) # energy cannot exceed initial energy
 
     def step(self) -> None:
         """Use to run one step of the simulation, updating the runner's velocity, energy, and distance based on the current phase of the run."""
@@ -172,7 +175,6 @@ class MonteCarloSimulation:
     def run(self) -> None:
         """Use to run the simulation until the target distance is reached."""
         # for now we will use a uniform random distribution
-        np.random.seed(42)  # for reproducibility
 
         for step in range(self.max_steps-1):
             self.step()
@@ -193,17 +195,20 @@ class MonteCarloSimulation:
 
             self.iteration = step + 1
 
-def create_dataframes(params: Params, num_sample: int) -> pd.DataFrame:
+def create_dataframes(params: Params, num_sample: int, seed: int=42) -> pd.DataFrame:
     """Use to create input dataframe which can then be used to run the simulation."""
     # create a numpy array that contains the random distribution of the parameters for multiple simulations
+    bounds_length_single = 1
+    bounds_length_range = 2
     df = pd.DataFrame()
+    rng = np.random.default_rng(seed)
     for param, bounds in asdict(params).items():
         # we make a very small adjustment
-        if len(bounds) == 1:
+        if len(bounds) == bounds_length_single:
             df[param] = np.full(num_sample, bounds[0])
 
-        elif len(bounds) == 2:
-            df[param] = np.random.uniform(bounds[0], bounds[1], num_sample)
+        elif len(bounds) == bounds_length_range:
+            df[param] = rng.uniform(bounds[0], bounds[1], num_sample)
 
         else:
             error_msg = f"Invalid bounds for parameter {param}: {bounds}"

@@ -1,6 +1,4 @@
-"""
-This is the main file for retrieving data and running the marathon simulation.
-"""
+"""Main file for retrieving data and running the marathon simulation."""
 from simulation.data_classes import Params, SimConfig
 from simulation.monte_carlo_simulation import (
     MonteCarloSimulation,
@@ -52,14 +50,10 @@ if __name__ == "__main__":
 
 
     # get input dataframe for the simulation
-
     df_input = create_dataframes(params, sim_cfg.num_sim)
 
-
-    
     csv_data="runs/2025-10-10_10-42/2025-10-10_10-42_streams.csv"
     json_data="runs/2025-10-10_10-42/2025-10-10_10-42_overall.json"
-    # print(terrain.df.head())  # check the terrain data
 
     sim = MonteCarloSimulation(sim_cfg, strat, df_input=df_input, csv_data=csv_data, json_data=json_data)
 
@@ -71,5 +65,5 @@ if __name__ == "__main__":
 
     # plotting results
     spaghetti_plot(sim)
-    # histogram_plot(sim)
+    histogram_plot(sim)
     elevation_headwind_plots(sim)

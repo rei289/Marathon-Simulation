@@ -1,6 +1,4 @@
-"""
-Use to run SHAP sensitivity analysis on the model
-"""
+"""Use to run SHAP sensitivity analysis on the model."""
 import numpy as np
 import pandas as pd
 import shap
@@ -32,27 +30,27 @@ def generate_lhs_samples(n_samples: int, dimensions: int, variable_bounds: dict)
 
     return qmc.scale(unscaled_samples, lower_bounds, upper_bounds)
 
-def run_shap_analysis(X: pd.DataFrame, y: np.ndarray) -> None:
+def run_shap_analysis(x: pd.DataFrame, y: np.ndarray) -> None:
     """Use to run SHAP analysis on the given input features and target variable.
 
-    :param X: Input features as a NumPy array
+    :param x: Input features as a NumPy array
     :param y: Target variable as a NumPy array
     """
     # split the data into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
+    x_train, x_test, y_train, _ = train_test_split(x, y, test_size=0.2, random_state=42)
+
     # train a Random Forest regressor on the training data
     model = RandomForestRegressor(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
-    
+    model.fit(x_train, y_train)
+
     # create a SHAP explainer for the trained model
-    explainer = shap.Explainer(model, X_train)
-    
+    explainer = shap.Explainer(model, x_train)
+
     # calculate SHAP values for the test set
-    shap_values = explainer(X_test)
-    
+    shap_values = explainer(x_test)
+
     # visualize the SHAP values (e.g., summary plot)
-    shap.summary_plot(shap_values, X_test)
+    shap.summary_plot(shap_values, x_test)
 
 if __name__ == "__main__":
     # generate test samples using LHS
@@ -68,7 +66,7 @@ if __name__ == "__main__":
         "rho": [1.225, 1.325],
         "convection": [10.0, 12.0],
         "alpha": [0.6, 0.8],
-        "psi": [0.003, 0.007]
+        "psi": [0.003, 0.007],
     }
     n_samples = 10000
     X = generate_lhs_samples(n_samples, len(variable_bounds), variable_bounds)

@@ -2,11 +2,11 @@
 
 from dataclasses import dataclass
 
-import numpy as np
-
 
 @dataclass
 class SimConfig:
+    """Configuration for the marathon simulation."""
+
     target_dist: float
     num_sim: int
     dt: float
@@ -18,6 +18,8 @@ class SimConfig:
 
 @dataclass
 class Params:
+    """Parameters for the marathon simulation. Each parameter is a list of two values representing the lower and upper bounds for sampling."""
+
     # contain bounds
     F: list[float]                      # Max thrust (m/s^2)
     E0: list[float]                     # Initial energy (m^2/s^2)
