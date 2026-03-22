@@ -10,7 +10,7 @@ from scipy.stats import qmc
 import numpy as np
 
 from simulation.monte_carlo_simulation import MonteCarloSimulation
-from simulation.data_classes import SimConfig, Params
+from simulation.data_classes import SimConfig
 
 
 def generate_lhs_samples(n_samples: int, dimensions: int, variable_bounds: dict) -> np.ndarray:

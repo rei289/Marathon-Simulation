@@ -131,48 +131,74 @@ class MonteCarloSimulation:
         
         return 0.7*temp_w + 0.2*temp_g + 0.1*self.temp_d  # weighted average to get a single WBGT value
         
-    def phase_1(self, theta:np.ndarray, headwind:np.ndarray, mask:np.ndarray) -> None:
-        """
-        This function provides the Acceleration Phase Logic
-        """
-        dv = self.F_values[mask] \
-            - (1/self.tau_values[mask]) * self.velocity[self.iteration][mask] \
-            - self.g*np.sin(theta[mask]) \
-            - (0.5*self.rho_values[mask]*self.drag_coefficient_values[mask] * self.frontal_area_values[mask] * (self.velocity[self.iteration][mask] + headwind[mask])**2) / self.mass_values[mask]
+    # def phase_1(self, theta:np.ndarray, headwind:np.ndarray, mask:np.ndarray) -> None:
+    #     """
+    #     This function provides the Acceleration Phase Logic
+    #     """
+    #     dv = self.F_values[mask] \
+    #         - (1/self.tau_values[mask]) * self.velocity[self.iteration][mask] \
+    #         - self.g*np.sin(theta[mask]) \
+    #         - (0.5*self.rho_values[mask]*self.drag_coefficient_values[mask] * self.frontal_area_values[mask] * (self.velocity[self.iteration][mask] + headwind[mask])**2) / self.mass_values[mask]
 
-        self.velocity[self.iteration + 1][mask] = self.velocity[self.iteration][mask] + dv*self.dt
+    #     self.velocity[self.iteration + 1][mask] = self.velocity[self.iteration][mask] + dv*self.dt
 
-        dE = self.sigma_values[mask] - self.F_values[mask]*self.velocity[self.iteration][mask]
+    #     dE = self.sigma_values[mask] - self.F_values[mask]*self.velocity[self.iteration][mask]
 
-        self.energy[self.iteration + 1][mask] = self.energy[self.iteration][mask] + dE*self.dt
+    #     self.energy[self.iteration + 1][mask] = self.energy[self.iteration][mask] + dE*self.dt
 
-    def phase_2(self, theta:np.ndarray, headwind:np.ndarray, mask:np.ndarray) -> None:
-        """
-        This function provides the Constant Velocity Phase Logic
-        """
-        self.velocity[self.iteration + 1][mask] = self.const_v[mask]
+    # def phase_2(self, theta:np.ndarray, headwind:np.ndarray, mask:np.ndarray) -> None:
+    #     """
+    #     This function provides the Constant Velocity Phase Logic
+    #     """
+    #     self.velocity[self.iteration + 1][mask] = self.const_v[mask]
 
-        dE = self.sigma_values[mask] \
-                - self.const_v[mask]*(self.const_v[mask]/self.tau_values[mask] \
-                    + self.g*np.sin(theta[mask]) \
-                    + (0.5*self.rho_values[mask]*self.drag_coefficient_values[mask]*self.frontal_area_values[mask]*(self.const_v[mask] + headwind[mask])**2)/self.mass_values[mask]) \
-                - (self.k_values[mask]*self.const_v[mask]**2*self.time_elapsed[self.iteration])/self.tau_values[mask]
+    #     dE = self.sigma_values[mask] \
+    #             - self.const_v[mask]*(self.const_v[mask]/self.tau_values[mask] \
+    #                 + self.g*np.sin(theta[mask]) \
+    #                 + (0.5*self.rho_values[mask]*self.drag_coefficient_values[mask]*self.frontal_area_values[mask]*(self.const_v[mask] + headwind[mask])**2)/self.mass_values[mask]) \
+    #             - (self.k_values[mask]*self.const_v[mask]**2*self.time_elapsed[self.iteration])/self.tau_values[mask]
 
-        self.energy[self.iteration + 1][mask] = self.energy[self.iteration][mask] + dE*self.dt
+    #     self.energy[self.iteration + 1][mask] = self.energy[self.iteration][mask] + dE*self.dt
 
-    def phase_3(self, theta:np.ndarray, headwind:np.ndarray, mask:np.ndarray) -> None:
-        """
-        This function provides the Deceleration Phase Logic
-        """
-        dv = self.sigma_values[mask]/self.velocity[self.iteration][mask] \
-                - (1/self.tau_values[mask]) * self.velocity[self.iteration][mask] \
-                - self.g*np.sin(theta[mask]) \
-                - (0.5*self.rho_values[mask]*self.drag_coefficient_values[mask]*self.frontal_area_values[mask]*(self.velocity[self.iteration][mask] + headwind[mask])**2)/self.mass_values[mask] \
-                - (self.k_values[mask]*self.const_v[mask]**2*self.time_elapsed[self.iteration])/(self.tau_values[mask]*self.velocity[self.iteration][mask])
+    # def phase_3(self, theta:np.ndarray, headwind:np.ndarray, mask:np.ndarray) -> None:
+    #     """
+    #     This function provides the Deceleration Phase Logic
+    #     """
+    #     dv = self.sigma_values[mask]/self.velocity[self.iteration][mask] \
+    #             - (1/self.tau_values[mask]) * self.velocity[self.iteration][mask] \
+    #             - self.g*np.sin(theta[mask]) \
+    #             - (0.5*self.rho_values[mask]*self.drag_coefficient_values[mask]*self.frontal_area_values[mask]*(self.velocity[self.iteration][mask] + headwind[mask])**2)/self.mass_values[mask] \
+    #             - (self.k_values[mask]*self.const_v[mask]**2*self.time_elapsed[self.iteration])/(self.tau_values[mask]*self.velocity[self.iteration][mask])
         
-        self.velocity[self.iteration + 1][mask] = self.velocity[self.iteration][mask] + dv*self.dt
+    #     self.velocity[self.iteration + 1][mask] = self.velocity[self.iteration][mask] + dv*self.dt
 
-        self.energy[self.iteration + 1][mask] = np.zeros(self.num_sim)[mask]
+    #     self.energy[self.iteration + 1][mask] = np.zeros(self.num_sim)[mask]
+
+    def math_model(self, v_target: np.ndarray, theta:np.ndarray, headwind:np.ndarray) -> None:
+        """
+        This function provides the equation logic for the simulation, incorporating the effects of terrain and weather on the runner's performance.
+        """
+
+        # calculate all the resistive forces
+        # f_resistance = (1/self.tau_values) * self.velocity[self.iteration] + self.g*np.sin(theta) + (0.5*self.rho_values*self.drag_coefficient_values*self.frontal_area_values*(self.velocity[self.iteration] + headwind)**2)/self.mass_values
+        f_resistance = self.g*np.sin(theta) + (0.5*self.rho_values*self.drag_coefficient_values*self.frontal_area_values*(self.velocity[self.iteration] + headwind)**2)/self.mass_values
+        # calculate amount of force we would like to apply to reach the target velocity, not accounting for resistive forces
+        f_desired = (v_target - self.velocity[self.iteration])/self.dt
+
+        # calculate the actual force applied by the runner, which is limited by the maximum thrust
+        f_desired = np.minimum(self.F_values, f_desired)
+
+        # check if the runner has enough energy to apply the actual force
+        f_desired = np.where(self.energy[self.iteration] > 0, f_desired, (self.sigma_values - (self.k_values*self.velocity[self.iteration]**2*self.time_elapsed[self.iteration])/self.tau_values)/self.velocity[self.iteration])
+
+        # calculate the change in velocity and energy based on the actual force applied
+        # dv = f_desired - f_resistance
+        dv = f_desired - f_resistance - (1/self.tau_values) * self.velocity[self.iteration]
+        dE = np.where(self.energy[self.iteration] > 0, self.sigma_values - (f_desired + f_resistance)*self.velocity[self.iteration] - (self.k_values*self.velocity[self.iteration]**2*self.time_elapsed[self.iteration])/self.tau_values, 0)
+
+        # update velocity and energy for the next iteration
+        self.velocity[self.iteration + 1] = self.velocity[self.iteration] + dv*self.dt
+        self.energy[self.iteration + 1] = self.energy[self.iteration] + dE*self.dt
     
     def step(self):
         """
@@ -186,26 +212,31 @@ class MonteCarloSimulation:
         self.elevation_profile[self.iteration] = theta[0]
         self.headwind_profile[self.iteration] = headwind[0]
 
-        # create a vectorized conditional to determine which phase we are in for each simulation
-        v = self.velocity[self.iteration]   # current velocity for all sims
-        e = self.energy[self.iteration]     # current energy for all sims
+        v_target = np.full(self.num_sim, self.const_v) if self.const_v is not None else self._constant_velocity()
 
-        # per-column conditions (vectorized if/elif/else)
-        m1 = self.active & (v < self.const_v) & (e > 0)   # phase 1
-        m2 = self.active & (v >= self.const_v) & (e > 0)  # phase 2
-        m3 = self.active & (e <= 0)                        # phase 3
+        # now we calculate the new velocity and energy based on controller logic which determines the target velocity
+        self.math_model(v_target, theta, headwind)
 
-        # phase 1
-        if m1.any():
-            self.phase_1(theta, headwind, m1)
+        # # create a vectorized conditional to determine which phase we are in for each simulation
+        # v = self.velocity[self.iteration]   # current velocity for all sims
+        # e = self.energy[self.iteration]     # current energy for all sims
+
+        # # per-column conditions (vectorized if/elif/else)
+        # m1 = self.active & (v < self.const_v) & (e > 0)   # phase 1
+        # m2 = self.active & (v >= self.const_v) & (e > 0)  # phase 2
+        # m3 = self.active & (e <= 0)                        # phase 3
+
+        # # phase 1
+        # if m1.any():
+        #     self.phase_1(theta, headwind, m1)
         
-        # phase 2
-        if m2.any():
-            self.phase_2(theta, headwind, m2)
+        # # phase 2
+        # if m2.any():
+        #     self.phase_2(theta, headwind, m2)
 
-        # phase 3
-        if m3.any():
-            self.phase_3(theta, headwind, m3)
+        # # phase 3
+        # if m3.any():
+        #     self.phase_3(theta, headwind, m3)
     
     def loop(self) -> None:
         """

@@ -1,10 +1,8 @@
 """
 This is the main file for retrieving data and running the marathon simulation.
 """
-from process_runs.run_retriever import retrieve_run
 from simulation.data_classes import SimConfig, Params
-from utilis.helper import extract_global_json
-from simulation.monte_carlo_simulation import MonteCarloSimulation, create_dataframes, spaghetti_plot, histogram_plot
+from simulation.monte_carlo_simulation import MonteCarloSimulation, create_dataframes, spaghetti_plot
 
 
 params = Params(
@@ -24,10 +22,10 @@ params = Params(
 
 sim_cfg = SimConfig(
     target_dist=4300,
-    num_sim=1000,
+    num_sim=10,
     dt=0.1,
     max_steps=10000,
-    const_v=None,
+    const_v=7.0,
     t1=None,
     t2=None
 )
@@ -61,5 +59,5 @@ if __name__ == "__main__":
     sim.loop()
 
     # plotting results
-    # spaghetti_plot(sim)
-    histogram_plot(sim)
+    spaghetti_plot(sim)
+    # histogram_plot(sim)
