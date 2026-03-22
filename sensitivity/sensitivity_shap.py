@@ -13,9 +13,8 @@ from simulation.monte_carlo_simulation import MonteCarloSimulation
 
 
 def generate_lhs_samples(n_samples: int, dimensions: int, variable_bounds: dict) -> np.ndarray:
-    """
-    Generates LHS samples scaled to specific variable ranges.
-    
+    """Use to generate LHS samples scaled to specific variable ranges.
+
     :param n_samples: Number of samples to generate
     :param dimensions: Number of input variables
     :param variable_bounds: Dictionary with variable names as keys and [min, max] lists as values
@@ -23,22 +22,19 @@ def generate_lhs_samples(n_samples: int, dimensions: int, variable_bounds: dict)
     """
     # initialize the LHS sampler
     sampler = qmc.LatinHypercube(d=dimensions)
-    
+
     # generate samples in the unit hypercube [0, 1]
     unscaled_samples = sampler.random(n=n_samples)
-    
+
     # map the samples to your actual variable ranges
     lower_bounds = [b[0] for b in variable_bounds.values()]
     upper_bounds = [b[1] for b in variable_bounds.values()]
-    
-    scaled_samples = qmc.scale(unscaled_samples, lower_bounds, upper_bounds)
-    
-    return scaled_samples
 
-def run_shap_analysis(X: pd.DataFrame, y: np.ndarray):
-    """
-    Runs SHAP analysis on the given input features and target variable.
-    
+    return qmc.scale(unscaled_samples, lower_bounds, upper_bounds)
+
+def run_shap_analysis(X: pd.DataFrame, y: np.ndarray) -> None:
+    """Use to run SHAP analysis on the given input features and target variable.
+
     :param X: Input features as a NumPy array
     :param y: Target variable as a NumPy array
     """

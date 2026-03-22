@@ -13,3 +13,4 @@ packages = { find = { where = ["."], include = ["*"] } }
 [tool.ruff]
 lint.extend-select = ["ALL"]
 lint.ignore = ["T201"]
+line-length = 150

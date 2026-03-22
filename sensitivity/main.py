@@ -1,7 +1,7 @@
 """
 This script serves as the main script to run the sensitivity analysis
 """
-from simulation.data_classes import SimConfig, Params
+from simulation.data_classes import Params, SimConfig
 from simulation.monte_carlo_simulation import MonteCarloSimulation, create_dataframes
 
 # csv_data="runs/2025-10-10_10-42/2025-10-10_10-42_streams.csv"
@@ -60,4 +60,4 @@ sim = MonteCarloSimulation(sim_cfg, df_input=create_dataframes(params, sim_cfg.n
 #     ), csv_data=csv_data, json_data=json_data)
 
 # perform the simulation
-sim.loop()
+sim.run()

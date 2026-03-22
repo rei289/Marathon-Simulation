@@ -5,8 +5,11 @@ from simulation.data_classes import Params, SimConfig
 from simulation.monte_carlo_simulation import (
     MonteCarloSimulation,
     create_dataframes,
+    elevation_headwind_plots,
+    histogram_plot,
     spaghetti_plot,
 )
+from simulation.pacing_strategy import ConstantPaceStrategy
 
 params = Params(
     F=[9.0, 12.0],
@@ -20,18 +23,20 @@ params = Params(
     rho=[1.225],
     convection=[10.0],
     alpha=[0.6, 0.8],
-    psi=[0.003, 0.007]
+    psi=[0.003, 0.007],
 )
 
 sim_cfg = SimConfig(
     target_dist=4300,
     num_sim=10,
     dt=0.1,
-    max_steps=10000,
-    const_v=7.0,
+    max_steps=20000,
+    const_v=5.0,
     t1=None,
-    t2=None
+    t2=None,
 )
+
+strat = ConstantPaceStrategy(sim_cfg)
 
 
 if __name__ == "__main__":
@@ -56,11 +61,15 @@ if __name__ == "__main__":
     json_data="runs/2025-10-10_10-42/2025-10-10_10-42_overall.json"
     # print(terrain.df.head())  # check the terrain data
 
-    sim = MonteCarloSimulation(sim_cfg, df_input=df_input, csv_data=csv_data, json_data=json_data)
+    sim = MonteCarloSimulation(sim_cfg, strat, df_input=df_input, csv_data=csv_data, json_data=json_data)
 
     # perform the simulation
     sim.run()
 
+    # print results
+    print(f"Finish times (s): {sim.finish_time}")
+
     # plotting results
     spaghetti_plot(sim)
     # histogram_plot(sim)
+    elevation_headwind_plots(sim)

@@ -1,6 +1,4 @@
-"""
-This file contains data classes for the marathon simulation project.
-"""
+"""File contains data classes for the marathon simulation project."""
 
 from dataclasses import dataclass
 
@@ -14,7 +12,7 @@ class SimConfig:
     dt: float
     max_steps: int
 
-    const_v: np.ndarray|None = None
+    const_v: float|None = None
     t1: float|None = None
     t2: float|None = None
 
