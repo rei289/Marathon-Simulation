@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+import numpy as np
+
 
 @dataclass
 class SimConfig:
@@ -35,3 +37,20 @@ class Params:
     convection: list[float]             # convection heat transfer coefficient (W/m^2K)
     alpha: list[float]                  # absorption coefficient for solar radiation (dimensionless)
     psi: list[float]                    # weighting factor for the drop in aerobic power per temperature (dimensionless)
+
+@dataclass
+class PacingContext:
+    """Context class to hold the current state of the simulation for use in pacing strategies."""
+
+    dt: float
+    velocity: np.ndarray
+    energy: np.ndarray
+    theta: np.ndarray
+    headwind: np.ndarray
+    tau: np.ndarray
+    mass: np.ndarray
+    rho: np.ndarray
+    drag_coefficient: np.ndarray
+    frontal_area: np.ndarray
+    f_max: np.ndarray
+    g: float
