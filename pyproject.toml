@@ -9,3 +9,8 @@ version = "0.1.0"
 [tool.setuptools]
 # This tells setuptools to automatically find all packages and sub-packages
 packages = { find = { where = ["."], include = ["*"] } }
+
+[tool.ruff]
+lint.extend-select = ["ALL"]
+lint.ignore = ["T201"]
+line-length = 150

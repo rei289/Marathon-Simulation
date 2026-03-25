@@ -8,3 +8,4 @@ __pycache__/
 /model_coefficients.json
 marathon_simulation.egg-info/
 /sensitivity/plots/
+.ruff_cache/

@@ -1,28 +1,24 @@
-"""
-This file contains class for preprocessing data for marathon simulations.
-"""
-import pandas as pd
-import math
-import numpy as np
-import os
+"""File contains class for preprocessing data for marathon simulations."""
 import json
+import math
+import os
+
+import numpy as np
+import pandas as pd
+
 
 class DataProcessor:
-    """
-    Class for processing data from Strava and Visual Crossing to prepare it for 
-    """
-    
-    def __init__(self, csv_data: dict, json_data: dict):
+    """Class for processing data from Strava and Visual Crossing to prepare it for use in the marathon simulation."""
+
+    def __init__(self, csv_data: dict, json_data: dict) -> None:
+        """Initialize the DataProcessor with raw CSV and JSON data."""
         # we first convert dictionary to pandas DataFrame
         self.csv_data = pd.DataFrame(csv_data)
-        # self.csv_data = pd.DataFrame(csv_data).fillna(0)  # Fill NaN values with 0
         self.json_data = json_data
         self.rename_columns()
 
     def rename_columns(self) -> None:
-        """
-        Rename columns in the CSV data to match the expected format.
-        """
+        """Rename columns in the CSV data to match the expected format."""
         self.csv_data.rename(columns={
             "time": "time_datetime",
             "heartrate": "heartrate_bpm",
@@ -146,7 +142,7 @@ class DataProcessor:
 
         # calculate the relative wind direction
         self.csv_data["relative_winddir_degree"] = (self.csv_data["winddir_degree"] - self.csv_data["athletedir_degree"]) % 360
-        self.csv_data["headwind_mps"] = self.csv_data["windspeed_mps"] * np.cos(np.radians(self.csv_data["relative_winddir_degree"]))
+        self.csv_data["headwind_mps"] = self.csv_data["windspeed_mps"] * np.cos(np.radians(self.csv_data["relative_winddir_degree"])) # Positive for headwind, negative for tailwind
         self.csv_data["crosswind_mps"] = self.csv_data["windspeed_mps"] * np.sin(np.radians(self.csv_data["relative_winddir_degree"]))
 
         # delete the temporary columns
