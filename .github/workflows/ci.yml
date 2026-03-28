@@ -12,10 +12,6 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: ./tests
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -31,5 +27,6 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Run Simulation
+        working-directory: ./tests # where the test files are located
         run: |
           python test_unit.py
