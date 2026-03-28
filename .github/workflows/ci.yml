@@ -1,0 +1,30 @@
+name: CI/CD Pipeline
+
+# 1. When should this run?
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+
+# 2. What should it do?
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest # The VM environment
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4 # Copies your code to the VM
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run tests
+      run: npm test
