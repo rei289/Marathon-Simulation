@@ -8,3 +8,4 @@ requests_oauthlib==2.0.0
 scikit_learn==1.8.0
 scipy==1.17.1
 shap==0.51.0
+pytest

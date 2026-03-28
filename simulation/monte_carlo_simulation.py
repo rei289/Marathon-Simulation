@@ -216,7 +216,7 @@ def create_dataframes(params: Params, num_sample: int, seed: int=42) -> pd.DataF
     df = pd.DataFrame()
     rng = np.random.default_rng(seed)
     for param, bounds in asdict(params).items():
-        # we make a very small adjustment
+        # if the bounds is a single value, fill the column with that value, if it's a range, sample from a uniform distribution within that range
         if len(bounds) == bounds_length_single:
             df[param] = np.full(num_sample, bounds[0])
 

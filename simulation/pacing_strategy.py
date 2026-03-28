@@ -1,28 +1,10 @@
 """Use to calculate target velocity at each time step based on a pacing strategy."""
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 
 import numpy as np
 
-from simulation.data_classes import SimConfig
+from simulation.data_classes import PacingContext, SimConfig
 
-
-@dataclass
-class PacingContext:
-    """Context class to hold the current state of the simulation for use in pacing strategies."""
-
-    dt: float
-    velocity: np.ndarray
-    energy: np.ndarray
-    theta: np.ndarray
-    headwind: np.ndarray
-    tau: np.ndarray
-    mass: np.ndarray
-    rho: np.ndarray
-    drag_coefficient: np.ndarray
-    frontal_area: np.ndarray
-    f_max: np.ndarray
-    g: float
 
 class PacingStrategy(ABC):
     """Abstract base class for pacing strategies."""
