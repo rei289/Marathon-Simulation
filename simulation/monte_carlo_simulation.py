@@ -20,13 +20,13 @@ import numpy as np
 import pandas as pd
 
 from simulation.data_classes import Params, SimConfig
-from simulation.pacing_strategy import PacingContext, PacingStrategy
+from simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy, PacingContext
 
 
 class MonteCarloSimulation:
     """Class to run a Monte Carlo simulation of the marathon model with varying parameters and conditions."""
 
-    def __init__(self, cfg: SimConfig, strat: PacingStrategy, df_input: pd.DataFrame, csv_data: str|None, json_data: str|None) -> None:
+    def __init__(self, cfg: SimConfig, df_input: pd.DataFrame, csv_data: str|None, json_data: str|None) -> None:
         """Use to initialize the simulation with the given configuration, input parameters, and optional course and weather data."""
         self.target_dist = cfg.target_dist
         self.num_sim = cfg.num_sim
@@ -47,7 +47,8 @@ class MonteCarloSimulation:
         self.solar_radiation = self.weather_info["solarradiation"]
 
         self.cfg = cfg
-        self.strat = strat
+        self.strat = ConstantPaceStrategy(cfg) if cfg.pacing == "constant velocity" else \
+                        EvenEffortStrategy(cfg) if cfg.pacing == "even effort" else None
         print(f"Running Monte Carlo Simulation with strategy: {self.strat.pace_type} and {self.num_sim} simulations.")
 
         self.g = 9.81  # gravitational acceleration (m/s^2)
