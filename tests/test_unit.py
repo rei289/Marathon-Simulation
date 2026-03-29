@@ -25,8 +25,8 @@ def sim_cfg() -> SimConfig:
 def params() -> Params:
     """Fixture to create a Params instance for testing."""
     return Params(
-        F=[10.0],
-        E0=[2000.0],
+        f_max=[10.0],
+        e_init=[2000.0],
         tau=[1.0],
         sigma=[25.0],
         gamma=[5e-5],

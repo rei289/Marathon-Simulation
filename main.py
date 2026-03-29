@@ -9,11 +9,11 @@ from simulation.monte_carlo_simulation import (
     histogram_plot,
     spaghetti_plot,
 )
-from simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy
+from simulation.pacing_strategy import ConstantPaceStrategy
 
 params = Params(
-    F=[9.0, 12.0],
-    E0=[1800.0, 2600.0],
+    f_max=[9.0, 12.0],
+    e_init=[1800.0, 2600.0],
     tau=[0.8, 1.2],
     sigma=[20.0, 35.0],
     gamma=[3e-5, 8e-5],
@@ -37,7 +37,6 @@ sim_cfg = SimConfig(
 )
 
 strat = ConstantPaceStrategy(sim_cfg)
-# strat = EvenEffortStrategy(sim_cfg)
 
 
 if __name__ == "__main__":

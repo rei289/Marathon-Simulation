@@ -1,4 +1,4 @@
-"""File contains data classes for the marathon simulation project."""
+"""f_maxile contains data classes for the marathon simulation project."""
 
 from dataclasses import dataclass
 
@@ -23,8 +23,8 @@ class Params:
     """Parameters for the marathon simulation. Each parameter is a list of two values representing the lower and upper bounds for sampling."""
 
     # contain bounds
-    F: list[float]                      # Max thrust (m/s^2)
-    E0: list[float]                     # Initial energy (m^2/s^2)
+    f_max: list[float]                  # Max thrust (m/s^2)
+    e_init: list[float]                 # Initial energy (m^2/s^2)
     tau: list[float]                    # Resistance coefficient (s)
     sigma: list[float]                  # Energy supply rate (m^2/s^3)
     gamma: list[float]                  # Fatigue constant (dimensionless)

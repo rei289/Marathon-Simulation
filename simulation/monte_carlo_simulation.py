@@ -72,7 +72,7 @@ class MonteCarloSimulation:
 
         # update the first row with the initial conditions
         self.velocity[0] = np.full(self.num_sim, 1e-8)  # start with a very small velocity to avoid division by zero
-        self.energy[0] = self.E0_values
+        self.energy[0] = self.e_init_values
         self.time_elapsed[0] = 0.0
         self.distance_covered[0] = np.zeros(self.num_sim)
         self.elevation_profile[0] = 0.0
@@ -85,8 +85,8 @@ class MonteCarloSimulation:
 
     def _constant_velocity(self) -> np.ndarray:
         """Use to calculate the constant velocity during phase 2 based on the model equations."""
-        const_t = 1/(2*self.sigma_values) * ((self.E0_values**2 + (4*self.sigma_values*self.target_dist**2)/self.tau_values)**0.5 - self.E0_values)
-        return (((self.E0_values*self.tau_values)/const_t) + self.sigma_values*self.tau_values)**0.5
+        const_t = 1/(2*self.sigma_values)*((self.e_init_values**2+(4*self.sigma_values*self.target_dist**2)/self.tau_values)**0.5-self.e_init_values)
+        return (((self.e_init_values*self.tau_values)/const_t) + self.sigma_values*self.tau_values)**0.5
 
 
     def _get_grade(self, distance: np.ndarray) -> float:
@@ -141,7 +141,7 @@ class MonteCarloSimulation:
         # calculate amount of force we would like to apply to reach the target velocity, not accounting for resistive forces
         f_desired = (v_target - self.velocity[self.iteration])/self.dt
         # calculate the actual force applied by the runner, which is limited by the maximum thrust
-        f_desired = np.minimum(self.F_values, f_desired)
+        f_desired = np.minimum(self.f_max_values, f_desired)
 
         # check if the runner has enough energy to apply the actual force
         f_desired = np.where(self.energy[self.iteration] > 0, f_desired, \
@@ -157,7 +157,7 @@ class MonteCarloSimulation:
 
         # update velocity and energy for the next iteration
         self.velocity[self.iteration + 1] = np.maximum(0.0, self.velocity[self.iteration] + dv*self.dt) # velocity cannot be negative
-        self.energy[self.iteration + 1] = np.clip(self.energy[self.iteration] + de*self.dt, 0.0, self.E0_values) # energy cannot exceed initial energy
+        self.energy[self.iteration + 1] = np.clip(self.energy[self.iteration] + de*self.dt, 0.0, self.e_init_values) # energy cannot exceed initial
 
     def step(self) -> None:
         """Use to run one step of the simulation, updating the runner's velocity, energy, and distance based on the current phase of the run."""
@@ -181,7 +181,7 @@ class MonteCarloSimulation:
             rho=self.rho_values,
             drag_coefficient=self.drag_coefficient_values,
             frontal_area=self.frontal_area_values,
-            f_max=self.F_values,
+            f_max=self.f_max_values,
             g=self.g,
         ))
         self.math_model(v_target, theta, headwind)

@@ -55,8 +55,8 @@ def run_shap_analysis(x: pd.DataFrame, y: np.ndarray) -> None:
 if __name__ == "__main__":
     # generate test samples using LHS
     variable_bounds = {
-        "F": [9.0, 12.0],
-        "E0": [1800.0, 2600.0],
+        "f_max": [9.0, 12.0],
+        "e_init": [1800.0, 2600.0],
         "tau": [0.8, 1.2],
         "sigma": [35.0, 55.0],
         "gamma": [3e-5, 8e-5],
