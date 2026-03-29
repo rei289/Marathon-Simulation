@@ -1,7 +1,7 @@
 """File contains class for preprocessing data for marathon simulations."""
 import json
 import math
-import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -29,15 +29,13 @@ class DataProcessor:
             "grade": "grade_percent",
             "moving": "moving",
             "latitude": "latitude_degree",
-            "longitude": "longitude_degree"
+            "longitude": "longitude_degree",
         }, inplace=True)
 
     def interpolate_missing_data(self) -> None:
-        """
-        This function fills in missing values using linear interpolation.
-        """
+        """Use function to fill in missing values using linear interpolation."""
         # resample the data to interpolate missing rows
-        # Create a column to mark original data points
+        # create a column to mark original data points
         self.csv_data["is_original"] = True
 
         # resample the data to interpolate missing rows
@@ -45,19 +43,19 @@ class DataProcessor:
         start_date_local = self.json_data["start_date_local"]
         # Convert to pandas.Timestamp and remove timezone info if present
         start_date_local_naive = pd.to_datetime(start_date_local).tz_localize(None)
-        self.csv_data["time_datetime"] = pd.to_datetime(self.csv_data["time_datetime"], unit='s', origin=start_date_local_naive)
+        self.csv_data["time_datetime"] = pd.to_datetime(self.csv_data["time_datetime"], unit="s", origin=start_date_local_naive)
         self.csv_data.set_index("time_datetime", inplace=True)
 
-        # Create a complete time range for every second
+        # create a complete time range for every second
         start_time = self.csv_data.index.min()
         end_time = self.csv_data.index.max()
-        complete_time_range = pd.date_range(start=start_time, end=end_time, freq='1s')
+        complete_time_range = pd.date_range(start=start_time, end=end_time, freq="1s")
 
-        # Reindex to include all seconds, marking new rows as interpolated
+        # reindex to include all seconds, marking new rows as interpolated
         self.csv_data = self.csv_data.reindex(complete_time_range)
         self.csv_data["is_original"] = self.csv_data["is_original"]
 
-        # Interpolate the missing values
+        # interpolate the missing values
         numeric_columns = self.csv_data.select_dtypes(include=[np.number]).columns
         self.csv_data[numeric_columns] = self.csv_data[numeric_columns].interpolate(method="linear")
 
@@ -66,34 +64,19 @@ class DataProcessor:
         self.csv_data.rename(columns={"index": "time_datetime"}, inplace=True)
 
     def smooth_data(self, features: list, window_size: int = 10) -> None:
-        """
-        Smooth the data using a rolling average.
-        """
+        """Smooth the data using a rolling average."""
         for feature in features:
             self.csv_data[f"smooth_{feature}"] = self.csv_data[feature].rolling(window=window_size, min_periods=1).mean()
 
-
-        # self.csv_data["heartrate_smooth_bps"] = self.csv_data["heartrate_bpm"].rolling(window=window_size, min_periods=1).mean() / 60  # Convert bpm to bps
-        # self.csv_data["velocity_smooth_mps"] = self.csv_data["velocity_mps"].rolling(window=window_size, min_periods=1).mean()
-        # self.csv_data["cadence_smooth_rps"] = self.csv_data["cadence_rps"].rolling(window=window_size, min_periods=1).mean()
-        # self.csv_data["altitude_smooth_m"] = self.csv_data["altitude_m"].rolling(window=window_size, min_periods=1).mean()
-        # self.csv_data["grade_smooth_percent"] = self.csv_data["grade_percent"].rolling(window=window_size, min_periods=1).mean()
-
     def _minute_to_second(self) -> None:
-        """
-        Convert units in the data.
-        """
-        # Convert minutes to seconds
-        self.csv_data["heartrate_bps"] = self.csv_data["heartrate_bpm"] / 60  # Convert bpm to bps
-        self.csv_data["cadence_rps"] = self.csv_data["cadence_rpm"] / 60  # Convert rpm to rps
+        """Convert units in the data."""
+        # convert minutes to seconds
+        self.csv_data["heartrate_bps"] = self.csv_data["heartrate_bpm"] / 60  # convert bpm to bps
+        self.csv_data["cadence_rps"] = self.csv_data["cadence_rpm"] / 60  # convert rpm to rps
 
-    def _calculate_bearing(self, lat1, lon1, lat2, lon2):
-        """
-        Calculates custom bearing where:
-        0° = South, 90° = West, 180° = North, 270° = East
-        """
-
-        # Convert degrees to radians
+    def _calculate_bearing(self, lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+        """Use to calculate custom bearing where: 0° = South, 90° = West, 180° = North, 270° = East."""
+        # convert degrees to radians
         lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
 
         delta_lon = lon2 - lon1
@@ -103,18 +86,10 @@ class DataProcessor:
             math.sin(lat1) * math.cos(lat2) * math.cos(delta_lon)
 
         standard_bearing = math.atan2(x, y)
-        standard_bearing_deg = (math.degrees(standard_bearing) + 360) % 360  # 0° = North
+        return (math.degrees(standard_bearing) + 360) % 360  # 0° = North
 
-        # # Rotate so 0° = South, 90° = West
-        # custom_bearing = (standard_bearing_deg + 180) % 360
-
-        return standard_bearing_deg  # Return the standard bearing in degrees
-
-
-    def feature_engineering(self, resting_heart_rate: float = 60) -> None:
-        """
-        This function performs feature engineering on the data.
-        """
+    def feature_engineering(self) -> None:
+        """Use to perform feature engineering on the data."""
         # make constants to make it easier to change later
         lat = "latitude_degree"
         lon = "longitude_degree"
@@ -122,7 +97,6 @@ class DataProcessor:
         hr = "smooth_heartrate_bps"
         vel = "smooth_velocity_mps"
         cad = "smooth_cadence_rps"
-
 
         # --------------------------- WIND DIRECTION AND SPEED ---------------------------
         # determine direction in which person is currently moving
@@ -133,7 +107,7 @@ class DataProcessor:
         for i in range(1, len(self.csv_data)):
             lat1, lon1 = self.csv_data.loc[i - 1, [lat, lon]]
             lat2, lon2 = self.csv_data.loc[i, [lat, lon]]
-            self.csv_data.at[i, "athletedir_degree"] = self._calculate_bearing(lat1, lon1, lat2, lon2)
+            self.csv_data.loc[i, "athletedir_degree"] = self._calculate_bearing(lat1, lon1, lat2, lon2)
         self.csv_data["athletedir_degree"] = self.csv_data["athletedir_degree"]
 
         # add wind direction and speed to the data
@@ -142,7 +116,8 @@ class DataProcessor:
 
         # calculate the relative wind direction
         self.csv_data["relative_winddir_degree"] = (self.csv_data["winddir_degree"] - self.csv_data["athletedir_degree"]) % 360
-        self.csv_data["headwind_mps"] = self.csv_data["windspeed_mps"] * np.cos(np.radians(self.csv_data["relative_winddir_degree"])) # Positive for headwind, negative for tailwind
+        # positive for headwind, negative for tailwind
+        self.csv_data["headwind_mps"] = self.csv_data["windspeed_mps"] * np.cos(np.radians(self.csv_data["relative_winddir_degree"]))
         self.csv_data["crosswind_mps"] = self.csv_data["windspeed_mps"] * np.sin(np.radians(self.csv_data["relative_winddir_degree"]))
 
         # delete the temporary columns
@@ -156,41 +131,30 @@ class DataProcessor:
         # --------------------------- DIFF ALTITUDE ---------------------------
         self.csv_data["diff_altitude_mps"] = self.csv_data[alt].diff()
 
-        # --------------------------- PACE EFFICIENCY ---------------------------
-        # data["pace_efficiency"] = data["velocity_mps"] / (data["heartrate_bpm"] / 60)  # m/s per bpm
-        # resting heart rate
-        self.csv_data["smooth_pace_efficiency"] = (self.csv_data[vel] / self.json_data["max_speed"]) * (1 - (self.csv_data[hr] - (resting_heart_rate/60)) / (self.json_data["max_heartrate"]/60))
-        self.csv_data["pace_efficiency"] = (self.csv_data["velocity_mps"] / self.json_data["max_speed"]) * (1 - (self.csv_data["heartrate_bps"] - (resting_heart_rate/60)) / (self.json_data["max_heartrate"]/60))
-        self.csv_data["diff_pace_efficiency"] = self.csv_data["smooth_pace_efficiency"].diff()  # Change in pace efficiency
-
         # --------------------------- DIFF HEART RATE ---------------------------
         self.csv_data["diff_heartrate_bps2"] = self.csv_data[hr].diff()  # Change in heart rate
 
         # --------------------------- ACCELERATION ---------------------------
         self.csv_data["diff_velocity_mps2"] = self.csv_data[vel].diff()  # m/s^2
 
-        # # remove rows with NaN values
-        # self.csv_data.dropna(inplace=True)
 
     def process(self) -> None:
-        """
-        Process the data by cleaning, interpolating, unit conversion, smoothing, and feature engineering.
-        """
+        """Use to process the data by cleaning, interpolating, unit conversion, smoothing, and feature engineering."""
         # interpolate missing data
         self.interpolate_missing_data()
         # convert units
         self._minute_to_second()
         # smooth the data
         self.smooth_data(window_size=5, features=[
-            "heartrate_bps", 
-            "velocity_mps", 
-            "cadence_rps", 
-            "altitude_m", 
+            "heartrate_bps",
+            "velocity_mps",
+            "cadence_rps",
+            "altitude_m",
             "grade_percent",
         ])
 
         # perform feature engineering
-        self.feature_engineering(resting_heart_rate=60)
+        self.feature_engineering()
 
         # smooth the data again after feature engineering
         self.smooth_data(window_size=5, features=[
@@ -198,19 +162,16 @@ class DataProcessor:
             "crosswind_mps",
         ])
 
-    def save_to_csv(self, folder_path: str, filename: str) -> None:
-        """
-        Save processed data to a CSV file.
-        """
-        self.csv_data.to_csv(os.path.join(folder_path, filename), index=False)
+    def save_to_csv(self, folder: str, filename: str) -> None:
+        """Use to save processed data to a CSV file."""
+        folder_path = Path(folder)
+        file_path = folder_path / filename
+        self.csv_data.to_csv(file_path, index=False)
         print(f"✅ Saved streams to {filename}")
 
-    def save_to_json(self, folder_path: str, filename: str) -> None:
-        """
-        Save processed data to a JSON file.
-        """
-        with open(os.path.join(folder_path, filename), 'w') as f:
-            json.dump(self.json_data, f, indent=4)
+    def save_to_json(self, folder: str, filename: str) -> None:
+        """Use to save processed data to a JSON file."""
+        folder_path = Path(folder)
+        file_path = folder_path / filename
+        file_path.write_text(json.dumps(self.json_data, indent=4))
         print(f"✅ Saved overall data to {filename}")
-
-
