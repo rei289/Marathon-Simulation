@@ -7,7 +7,7 @@ import numpy as np
 import optuna
 import pandas as pd
 from scipy import signal
-from scipy.signal import butter, filtfilt, welch
+from scipy.signal import butter, filtfilt
 
 from simulation.data_classes import SimConfig
 from simulation.monte_carlo_simulation import MonteCarloSimulation
@@ -31,8 +31,9 @@ class ModelFitter:
         grade = df["grade_percent"].to_numpy()
         headwind = df["headwind_mps"].to_numpy()
 
-        with open(json_path, "r") as f:
-            overall_data = json.load(f)
+        json_path = Path(json_path)
+        content = json_path.read_text()
+        overall_data = json.loads(content)
 
         self.run_data = {
             "time": t_obs,
@@ -96,7 +97,7 @@ class ModelFitter:
             "velocity": v_sim,
         })
 
-    def objective_function(self, trial) -> float:
+    def objective_function(self, trial: optuna.Trial) -> float:
         """Objective function to minimize the difference between the observed and simulated finish times."""
         f_max = trial.suggest_float("f_max", 9.0, 12.0)
         e_init = trial.suggest_float("e_init", 1800.0, 2600.0)
@@ -141,10 +142,11 @@ class ModelFitter:
         return np.mean((df_sim_masked["velocity"] - self.df_obs["velocity"]) ** 2)
 
 
-def generate_realistic_noise(length: int, target_rmse: float, cutoff_hz: float = 0.1, fs: float = 1.0) -> np.ndarray:
+def generate_realistic_noise(length: int, target_rmse: float, cutoff_hz: float = 0.1, fs: float = 1.0, seed: int = 42) -> np.ndarray:
     """Use to generate realistic noise that can be added to the simulation output to better match the observed data."""
     # generate raw Gaussian noise
-    raw_noise = np.random.normal(0, 1, length)
+    rng = np.random.default_rng(seed)
+    raw_noise = rng.normal(0, 1, length)
 
     # design a Low-Pass Butterworth Filter
     # nyquist frequency is half the sampling rate
@@ -204,12 +206,12 @@ if __name__ == "__main__":
 
     data["noise_cutoff_freq"] = cutoff_freq
 
+    # lastly add the run date to know which run these parameters correspond to
+    data["run_date"] = date
 
     # delete the model_coefficients.json if it exists
-
     file = Path("model_coefficients.json")
     if Path.exists(file):
         Path.unlink(file)
 
-    with Path.open(file, "w") as f:
-        json.dump(data, f, indent=4)
+    file.write_text(json.dumps(data, indent=4))
