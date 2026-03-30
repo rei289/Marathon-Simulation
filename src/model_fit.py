@@ -9,9 +9,9 @@ import pandas as pd
 from scipy import signal
 from scipy.signal import butter, filtfilt
 
-from simulation.data_classes import SimConfig
-from simulation.monte_carlo_simulation import MonteCarloSimulation
-from simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy
+from src.simulation.data_classes import SimConfig
+from src.simulation.monte_carlo_simulation import MonteCarloSimulation
+from src.simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy
 
 
 class ModelFitter:

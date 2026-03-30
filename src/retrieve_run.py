@@ -1,6 +1,6 @@
 """Main file for retrieving runs."""
-from process_runs.run_retriever import retrieve_run
-from utilis.helper import extract_global_json
+from src.process_runs.run_retriever import retrieve_run
+from src.utilis.helper import extract_global_json
 
 if __name__ == "__main__":
     # load configuration from globals.json

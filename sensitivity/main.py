@@ -5,8 +5,8 @@ from dataclasses import asdict
 import pandas as pd
 from sensitivity_shap import generate_lhs_samples, run_shap_analysis
 
-from simulation.data_classes import Params, SimConfig
-from simulation.monte_carlo_simulation import MonteCarloSimulation
+from src.simulation.data_classes import Params, SimConfig
+from src.simulation.monte_carlo_simulation import MonteCarloSimulation
 
 if __name__ == "__main__":
     params = Params(

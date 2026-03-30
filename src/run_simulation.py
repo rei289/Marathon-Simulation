@@ -1,8 +1,8 @@
 """Execute this script to run the monte carlo simulation."""
 import numpy as np
 
-from simulation.data_classes import Params, SimConfig
-from simulation.monte_carlo_simulation import (
+from src.simulation.data_classes import Params, SimConfig
+from src.simulation.monte_carlo_simulation import (
     MonteCarloSimulation,
     create_dataframes,
     elevation_headwind_plots,

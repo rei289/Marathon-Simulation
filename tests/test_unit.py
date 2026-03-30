@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
-from simulation.data_classes import PacingContext, Params, SimConfig
-from simulation.monte_carlo_simulation import MonteCarloSimulation, create_dataframes
-from simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy
+from src.simulation.data_classes import PacingContext, Params, SimConfig
+from src.simulation.monte_carlo_simulation import MonteCarloSimulation, create_dataframes
+from src.simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy
 
 
 @pytest.fixture
