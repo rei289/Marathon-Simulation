@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from simulation.data_classes import PacingContext, SimConfig
+from src.simulation.data_classes import PacingContext, SimConfig
 
 
 class PacingStrategy(ABC):

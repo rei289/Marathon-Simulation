@@ -19,8 +19,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from simulation.data_classes import Params, SimConfig
-from simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy, PacingContext
+from src.simulation.data_classes import Params, SimConfig
+from src.simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy, PacingContext
 
 
 class MonteCarloSimulation:

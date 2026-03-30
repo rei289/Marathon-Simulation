@@ -3,9 +3,9 @@ from pathlib import Path
 
 from dateutil import parser
 
-from process_runs.api.strava import StravaDataRetriever
-from process_runs.api.visual_crossing import VisualCrossingDataRetriever
-from process_runs.process_data import DataProcessor
+from src.process_runs.api.strava import StravaDataRetriever
+from src.process_runs.api.visual_crossing import VisualCrossingDataRetriever
+from src.process_runs.process_data import DataProcessor
 
 
 def retrieve_run(num_runs: int = 10, output_folder: str = "data") -> None:
