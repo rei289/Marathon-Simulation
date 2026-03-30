@@ -55,7 +55,7 @@ class MonteCarloSimulation:
 
         # get the parameter values from the input dataframe
         for input_var in df_input.columns:
-            setattr(self, f"{input_var}_values", df_input[input_var].values)
+            setattr(self, f"{input_var}_values", df_input[input_var].to_numpy().copy())
 
         # before we start, calculate the effective aerobic supply using the WBGT to adjust the sigma value based on the heat stress
         self.sigma_values *= np.ones(self.num_sim) - self.psi_values*np.maximum(0, self._get_wbgt() - 15)  # adjust sigma for heat stress
@@ -208,6 +208,15 @@ class MonteCarloSimulation:
             self.distance_covered[step + 1] = self.distance_covered[step] + np.where(self.active, self.velocity[step] * self.dt, 0.0)
 
             self.iteration = step + 1
+
+    def save_results(self) -> None:
+        """Use to save the results of the simulation to a CSV file."""
+        df_results = pd.DataFrame({
+            "finish_time": self.finish_time,
+            "final_velocity": self.velocity[self.iteration],
+            "final_energy": self.energy[self.iteration],
+        })
+        df_results.to_csv("simulation_results.csv", index=False)
 
 def create_dataframes(params: Params, num_sample: int, seed: int=42) -> pd.DataFrame:
     """Use to create input dataframe which can then be used to run the simulation."""
