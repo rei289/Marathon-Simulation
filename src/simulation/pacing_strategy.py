@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from simulation.data_classes import PacingContext, SimConfig
+from src.simulation.data_classes import PacingContext, SimConfig
 
 
 class PacingStrategy(ABC):
@@ -26,7 +26,7 @@ class ConstantPaceStrategy(PacingStrategy):
             error_message = "ConstantPaceStrategy requires a constant velocity (const_v) to be defined in SimConfig."
             raise ValueError(error_message)
 
-    def get_target_velocity(self, ctx: PacingContext) -> np.ndarray:
+    def get_target_velocity(self, ctx: PacingContext) -> np.ndarray: # noqa: ARG002
         """Return the constant target velocity."""
         return self.target_velocity
 

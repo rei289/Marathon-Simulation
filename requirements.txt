@@ -1,6 +1,8 @@
 matplotlib==3.10.8
-numpy==2.4.3
+numpy==2.4.4
+optuna==4.8.0
 pandas==3.0.1
+pytest==9.0.2
 python-dotenv==1.2.2
 python_dateutil==2.9.0.post0
 Requests==2.33.0
@@ -8,4 +10,3 @@ requests_oauthlib==2.0.0
 scikit_learn==1.8.0
 scipy==1.17.1
 shap==0.51.0
-pytest

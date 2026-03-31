@@ -1,19 +1,18 @@
 """Execute this script to run the monte carlo simulation."""
 import numpy as np
 
-from simulation.data_classes import Params, SimConfig
-from simulation.monte_carlo_simulation import (
+from src.simulation.data_classes import Params, SimConfig
+from src.simulation.monte_carlo_simulation import (
     MonteCarloSimulation,
     create_dataframes,
     elevation_headwind_plots,
     histogram_plot,
     spaghetti_plot,
 )
-from simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy
 
 params = Params(
-    F=[9.0, 12.0],
-    E0=[1800.0, 2600.0],
+    f_max=[9.0, 12.0],
+    e_init=[1800.0, 2600.0],
     tau=[0.8, 1.2],
     sigma=[20.0, 35.0],
     gamma=[3e-5, 8e-5],
@@ -32,13 +31,8 @@ sim_cfg = SimConfig(
     dt=0.1,
     max_steps=20000,
     const_v=5.0,
-    t1=None,
-    t2=None,
+    pacing="constant velocity",
 )
-
-strat = ConstantPaceStrategy(sim_cfg)
-# strat = EvenEffortStrategy(sim_cfg)
-
 
 if __name__ == "__main__":
     # get input dataframe for the simulation
@@ -47,7 +41,7 @@ if __name__ == "__main__":
     csv_data=None
     json_data=None
 
-    sim = MonteCarloSimulation(sim_cfg, strat, df_input=df_input, csv_data=csv_data, json_data=json_data)
+    sim = MonteCarloSimulation(sim_cfg, df_input=df_input, csv_data=csv_data, json_data=json_data)
 
     # perform the simulation
     sim.run()

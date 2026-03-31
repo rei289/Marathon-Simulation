@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
-from simulation.data_classes import PacingContext, Params, SimConfig
-from simulation.monte_carlo_simulation import MonteCarloSimulation, create_dataframes
-from simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy
+from src.simulation.data_classes import PacingContext, Params, SimConfig
+from src.simulation.monte_carlo_simulation import MonteCarloSimulation, create_dataframes
+from src.simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy
 
 
 @pytest.fixture
@@ -25,8 +25,8 @@ def sim_cfg() -> SimConfig:
 def params() -> Params:
     """Fixture to create a Params instance for testing."""
     return Params(
-        F=[10.0],
-        E0=[2000.0],
+        f_max=[10.0],
+        e_init=[2000.0],
         tau=[1.0],
         sigma=[25.0],
         gamma=[5e-5],

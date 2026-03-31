@@ -1,0 +1,27 @@
+services:
+  simulation:
+    build: .
+    working_dir: /app
+    command: python -m src.run_simulation
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+  
+  retrieve_runs:
+    build: .
+    working_dir: /app
+    command: python -m src.retrieve_run
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  model_training:
+    build: .
+    working_dir: /app
+    command: python -m src.model_fit
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
