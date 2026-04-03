@@ -12,7 +12,9 @@ In addition to the Kellner model, this simulation incorporates:
 """
 
 import json
+import uuid
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -208,8 +210,10 @@ class MonteCarloSimulation:
 
             self.iteration = step + 1
 
-    def save_results(self) -> None:
+    def save_to_cloud_results(self) -> None:
         """Use to save the results metadata, and configuration of the simulation."""
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        run_id = f"{ts}_{uuid.uuid4().hex[:8]}"
         df_results = pd.DataFrame({
             "finish_time": self.finish_time,
             "velocity_profile": self.velocity,

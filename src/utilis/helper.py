@@ -18,7 +18,6 @@ def load_units(config_path: str | Path = "config/units.yml") -> dict:
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
-
 def units(unit: str, config_path: str | Path = "config/units.yml") -> str:
     """Return the SI unit for that particular unit name."""
     cfg = load_units(config_path)
@@ -48,3 +47,15 @@ def get_param_info(param_name: str, config_path: str | Path = "config/parameters
     param_info = cfg[name][param_name]
     param_info["unit"] = units(param_info["unit"])
     return param_info
+
+def get_local_config() -> dict:
+    """Get local config from config/local_config.yml.
+
+    LATER USE TERRAFORM TO MANAGE THIS FILE AND MAKE SURE IT'S NOT COMMITTED TO GIT.
+    """
+    path = Path("config/local_config.yml")
+    if not path.exists():
+        raise FileNotFoundError(f"Local config file not found at: {path}")
+
+    with path.open("r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
