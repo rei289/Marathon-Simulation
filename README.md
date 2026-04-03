@@ -1,5 +1,5 @@
-# Marathon-Simulation
-A method to simulate how fast a person would be able to run a marathon, given different external factors
+# StrideSim
+StrideSim is a project that simulates runner's running patterns and provides insights into their performance. The project is built using Python and utilizes various libraries for data analysis and visualization. It utilizes GCP for data storage and processing, and is designed to be scalable and efficient. The project includes features such as data preprocessing, model training, and performance evaluation. It also provides a user-friendly interface for visualizing the results and gaining insights into the runner's performance.
 
 ## Setup
 To set up the environment, run the following command in your terminal:
