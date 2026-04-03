@@ -1,0 +1,104 @@
+version: 1
+
+metadata:
+  project: Marathon_Simulation
+  description: All parameters used in the simulation and their properties
+
+physical:
+  velocity:
+    unit: velocity
+    min: 0
+    max: 15     # m/s, ~54 km/h, faster than any human can run
+  acceleration:
+    unit: acceleration
+    min: -10    # m/s^2, deceleration limit (braking)
+    max: 10     # m/s^2, acceleration limit (sprinting)
+  mass:
+    unit: mass
+    min: 30     # kg, very light human
+    max: 200    # kg, very heavy human
+  energy:
+    unit: energy
+    min: 0      # J/kg, no energy
+    max: 10000  # J/kg, very high energy (e.g., elite athlete)
+  area:
+    unit: area
+    min: 0.1    # m^2, very small frontal area
+    max: 1.0    # m^2, very large frontal area (e.g., tall runner with arms out)
+
+  tau:
+    unit: time
+    min: 0.1    # s, very short time constant (fast response)
+    max: 10.0   # s, very long time constant (slow response)
+  sigma:
+    unit: sigma
+    min: 0.1    # m^2/s^3, low power output
+    max: 10.0   # m^2/s^3, high power output
+  gamma:
+    unit: gamma
+    min: 0.01   # 1/s, slow fatigue
+    max: 1.0    # 1/s, fast fatigue
+
+  
+
+environmental:
+  temperature:
+    unit: temperature
+    min: -30  # C, extreme cold
+    max: 50   # C, extreme heat
+  pressure:
+    unit: pressure
+    min: 800   # Pa, high altitude
+    max: 1100  # Pa, low altitude (sea level)
+  grade:
+    unit: grade
+    min: -20  # percent, steep downhill
+    max: 20   # percent, steep uphill
+  humidity:
+    unit: humidity
+    min: 0     # percent, completely dry
+    max: 100   # percent, fully saturated
+  solar_radiation:
+    unit: solar_radiation
+    min: 0     # W/m^2, no sunlight
+    max: 1200  # W/m^2, very strong sunlight (e.g., desert midday)
+  headwind:
+    unit: velocity
+    min: -20  # m/s, strong tailwind
+    max: 20   # m/s, strong headwind
+  air_density:
+    unit: density
+    min: 0.8   # kg/m^3, high altitude
+    max: 1.3   # kg/m^3, sea level
+  convection:
+    unit: convection
+    min: 0     # W/(m^2*K), no convection
+    max: 1000  # W/(m^2*K), extreme convection (e.g., strong wind)
+  drag_coefficient:
+    unit: dimensionless
+    min: 0.1   # dimensionless, very aerodynamic
+    max: 1.0   # dimensionless, very non-aerodynamic
+  alpha:
+    unit: dimensionless
+    min: 0     # dimensionless, no effect of environment
+    max: 1     # dimensionless, full effect of environment
+  psi:
+    unit: dimensionless
+    min: 0     # dimensionless, no psychological effect
+    max: 1     # dimensionless, maximum psychological effect
+  
+simulation:
+  time_step:
+    unit: time
+    min: 0.01  # s, very small time step for high precision
+    max: 1.0   # s, larger time step for faster simulation with less precision
+  total_time:
+    unit: time
+    min: 0     # s, simulation must run for some time
+    max: 21600  # s, 6 hours, longer than any marathon time
+  max_iterations:
+    unit: dimensionless
+    min: 1     # at least one iteration
+    max: 1000000  # upper limit to prevent infinite loops
+  
+  

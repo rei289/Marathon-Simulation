@@ -1,0 +1,15 @@
+version: 1
+
+metadata:
+  project: Marathon_Simulation
+  description: Constant values used across simulation inputs/outputs
+
+# physics
+physics:
+  # physical constants
+  gravity:
+    value: 9.81
+    unit: m/s^2
+  reference_temp:
+    value: 15
+    unit: C

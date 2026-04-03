@@ -6,6 +6,7 @@ import pytest
 from src.simulation.data_classes import PacingContext, Params, SimConfig
 from src.simulation.monte_carlo_simulation import MonteCarloSimulation, create_dataframes
 from src.simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy
+from src.utilis.helper import get_param_info
 
 
 @pytest.fixture
@@ -111,3 +112,28 @@ def test_even_effort_strategy(sim_cfg: SimConfig, ctx: PacingContext) -> None:
     strat = EvenEffortStrategy(sim_cfg)
     target_velocity = strat.get_target_velocity(ctx)
     assert np.all(target_velocity > 0.0)
+
+# boundary condition tests
+def test_tau(sim: MonteCarloSimulation) -> None:
+    """Test that the tau parameter is between min and max values."""
+    sim.run()
+    min_tau = get_param_info("tau")["min"]
+    max_tau = get_param_info("tau")["max"]
+    assert np.all(sim.tau_values >= min_tau)
+    assert np.all(sim.tau_values <= max_tau)
+
+def test_sigma(sim: MonteCarloSimulation) -> None:
+    """Test that the sigma parameter is between min and max values."""
+    sim.run()
+    min_sigma = get_param_info("sigma")["min"]
+    max_sigma = get_param_info("sigma")["max"]
+    assert np.all(sim.sigma_values >= min_sigma)
+    assert np.all(sim.sigma_values <= max_sigma)
+
+def test_gamma(sim: MonteCarloSimulation) -> None:
+    """Test that the gamma parameter is between min and max values."""
+    sim.run()
+    min_gamma = get_param_info("gamma")["min"]
+    max_gamma = get_param_info("gamma")["max"]
+    assert np.all(sim.gamma_values >= min_gamma)
+    assert np.all(sim.gamma_values <= max_gamma)

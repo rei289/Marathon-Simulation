@@ -1,0 +1,64 @@
+version: 1
+unit_system: SI
+
+metadata:
+  project: Marathon_Simulation
+  description: Canonical units used across simulation inputs/outputs
+
+# canonical units expected internally by the model
+canonical:
+  distance: m
+  time: s
+  # physical parameters
+  velocity: m/s
+  acceleration: m/s^2
+  mass: kg
+  force: m/s^2
+  energy: m^2/s^2
+  area: m^2
+
+  # environmental parameters
+  temperature: C
+  pressure: Pa
+  angle: rad
+  grade: percent
+  humidity: percent
+  solar_radiation: W/m^2
+  density: kg/m^3
+  convection: W/(m^2*K)
+
+  # specific model parameters
+  sigma: m^2/s^3
+  gamma: 1/s
+  dimensionless: 
+  
+
+# aliases accepted in input files
+aliases:
+  meter: m
+  meters: m
+  sec: s
+  second: s
+  mps: m/s
+  degC: C
+  celsius: C
+  pct: percent
+
+# conversion hints (for parsers/loaders)
+conversions:
+  temperature:
+    F_to_C: "(x - 32) * 5/9"
+    K_to_C: "x - 273.15"
+  speed:
+    kmh_to_mps: "x / 3.6"
+    mph_to_mps: "x * 0.44704"
+  distance:
+    km_to_m: "x * 1000"
+    mile_to_m: "x * 1609.344"
+  energy:
+    cal_to_J: "x * 4.184"
+
+equivalences:
+  force: ["m/s^2", "N/kg"]  # Newtons per kg is equivalent to m/s^2
+  energy: ["m^2/s^2", "J/kg"]  # Joules per kg is equivalent to m^2/s^2
+  sigma: ["m^2/s^3", "W/kg", "J/(kg*s)"]  # Watts per kg is equivalent to m^2/s^3

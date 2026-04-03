@@ -89,7 +89,6 @@ class MonteCarloSimulation:
         const_t = 1/(2*self.sigma_values)*((self.e_init_values**2+(4*self.sigma_values*self.target_dist**2)/self.tau_values)**0.5-self.e_init_values)
         return (((self.e_init_values*self.tau_values)/const_t) + self.sigma_values*self.tau_values)**0.5
 
-
     def _get_grade(self, distance: np.ndarray) -> float:
         """Use to returns the grade (theta) in radians at a given distance along the course."""
         dist = self.df["distance_m"].to_numpy()
@@ -210,13 +209,13 @@ class MonteCarloSimulation:
             self.iteration = step + 1
 
     def save_results(self) -> None:
-        """Use to save the results of the simulation to a CSV file."""
+        """Use to save the results metadata, and configuration of the simulation."""
         df_results = pd.DataFrame({
             "finish_time": self.finish_time,
-            "final_velocity": self.velocity[self.iteration],
-            "final_energy": self.energy[self.iteration],
+            "velocity_profile": self.velocity,
+            "energy_profile": self.energy,
         })
-        df_results.to_csv("simulation_results.csv", index=False)
+        df_results.to_parquet("simulation_results.parquet", index=False)
 
 def create_dataframes(params: Params, num_sample: int, seed: int=42) -> pd.DataFrame:
     """Use to create input dataframe which can then be used to run the simulation."""
@@ -238,7 +237,6 @@ def create_dataframes(params: Params, num_sample: int, seed: int=42) -> pd.DataF
             raise ValueError(error_msg)
 
     return df
-
 
 def spaghetti_plot(sim: MonteCarloSimulation) -> None:
     """Use this function to plot all the results of the simulation (Note costs a lot of memory)."""
