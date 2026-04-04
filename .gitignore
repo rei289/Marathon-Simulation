@@ -10,3 +10,4 @@ marathon_simulation.egg-info/
 /sensitivity/plots/
 .ruff_cache/
 model_coefficients.json
+notes.txt

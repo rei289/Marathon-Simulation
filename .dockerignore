@@ -19,6 +19,7 @@ dist/
 .mypy_cache/
 .coverage
 htmlcov/
+.ruff_cache/
 
 # OS files
 .DS_Store
@@ -26,3 +27,7 @@ Thumbs.db
 
 # Optional: keep image smaller
 tests/
+runs/
+sensitivity/
+notes.txt
+research papers/

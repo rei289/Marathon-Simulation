@@ -15,11 +15,13 @@ import json
 import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from google.cloud import storage
 
 from src.simulation.data_classes import Params, SimConfig
 from src.simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy, PacingContext
@@ -34,6 +36,9 @@ class MonteCarloSimulation:
         self.num_sim = cfg.num_sim
         self.dt = cfg.dt
         self.max_steps = cfg.max_steps
+
+        # create unique simulation ids for every trajectory which we can use to track the results across different data structures
+        self.sim_number = np.array([f"sim_{i}" for i in range(self.num_sim)])
 
         self.df = pd.read_csv(csv_data)[["distance_m", "grade_percent", "headwind_mps"]].fillna(0) if csv_data is not None \
                                         else pd.DataFrame({"distance_m": [0], "grade_percent": [0], "headwind_mps": [0]})
@@ -210,16 +215,68 @@ class MonteCarloSimulation:
 
             self.iteration = step + 1
 
-    def save_to_cloud_results(self) -> None:
+    def save_to_cloud_results(self, bucket_name: str) -> None:
         """Use to save the results metadata, and configuration of the simulation."""
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        run_id = f"{ts}_{uuid.uuid4().hex[:8]}"
-        df_results = pd.DataFrame({
+        job_id = f"{ts}_{uuid.uuid4().hex[:8]}"
+        base_path = f"simulations/{job_id}"
+
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+
+        # save summary of results
+        df_summary = pd.DataFrame({
+            "sim_number": self.sim_number,
             "finish_time": self.finish_time,
-            "velocity_profile": self.velocity,
-            "energy_profile": self.energy,
         })
-        df_results.to_parquet("simulation_results.parquet", index=False)
+        buffer_summary = BytesIO()
+        df_summary.to_parquet(buffer_summary, index=False)
+        buffer_summary.seek(0)
+        summary_blob = bucket.blob(f"{base_path}/summary.parquet")
+        summary_blob.upload_from_file(buffer_summary, content_type="application/octet-stream")
+        # # save core results
+        # df_results = pd.DataFrame({
+        #     "time": self.time_elapsed,
+        #     "distance": self.distance_covered,
+        #     "velocity_profile": self.velocity,
+        #     "energy_profile": self.energy,
+        # })
+
+        # buffer_results = BytesIO()
+        # df_results.to_parquet(buffer_results, index=False)
+        # buffer_results.seek(0)
+        # blob = bucket.blob(f"{base_path}/simulation_results.parquet")
+        # blob.upload_from_file(buffer_results, content_type="application/octet-stream")
+
+        # save simulation configuration
+        config_data = asdict(self.cfg)
+        config_blob = bucket.blob(f"{base_path}/config.json")
+        config_blob.upload_from_string(json.dumps(config_data), content_type="application/json")
+
+        # save metadata
+        metadata = {
+            "job_id": job_id,
+            "created_at": ts,
+            "bucket": bucket_name,
+        }
+
+        metadata_blob = bucket.blob(f"{base_path}/metadata.json")
+        metadata_blob.upload_from_string(
+            json.dumps(metadata, indent=2),
+            content_type="application/json",
+        )
+
+
+        # save input parameters
+        # input_data = self.df_input
+
+        return {
+            f"gs://{bucket_name}/{base_path}/summary.parquet",
+            # f"gs://{bucket_name}/{base_path}/simulation_results.parquet",
+            f"gs://{bucket_name}/{base_path}/config.json",
+            f"gs://{bucket_name}/{base_path}/metadata.json",
+        }
+
 
 def create_dataframes(params: Params, num_sample: int, seed: int=42) -> pd.DataFrame:
     """Use to create input dataframe which can then be used to run the simulation."""

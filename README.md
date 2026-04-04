@@ -4,6 +4,10 @@ StrideSim is a project that simulates runner's running patterns and provides ins
 ## Setup
 To set up the environment, run the following command in your terminal:
 ```bash
+python -m venv venv
+```
+This will create a virtual environment named `venv`. To activate the virtual environment, use the
+```bash
 pip install -r requirements.txt
 ```
 Then run

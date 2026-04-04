@@ -7,11 +7,12 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 # install Python dependencies first (better layer caching)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements-prod.txt .
+RUN pip install --no-cache-dir --prefer-binary -r requirements-prod.txt
 
 # copy project files
 COPY . .
 
 # default command
-CMD ["python", "-m", "src.run_simulation"]
+CMD ["python", "main.py"]
+# CMD ["python", "-m", "src.run_simulation"]

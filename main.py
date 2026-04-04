@@ -1,4 +1,6 @@
-"""Execute this script to run the monte carlo simulation."""
+"""Test script to deploy directly in GCP."""
+import os
+
 import numpy as np
 
 from src.simulation.data_classes import Params, SimConfig
@@ -32,6 +34,8 @@ sim_cfg = SimConfig(
 )
 
 if __name__ == "__main__":
+    # get bucket name from environment variable
+    bucket_name = os.getenv("BUCKET_NAME")
     # get input dataframe for the simulation
     df_input = create_dataframes(params, sim_cfg.num_sim)
 
@@ -42,13 +46,8 @@ if __name__ == "__main__":
 
     # perform the simulation
     sim.run()
-    sim.save_to_cloud_results("")
+    sim.save_to_cloud_results(bucket_name)
 
     # print results
     print(f"Average finish time (s): {np.mean(sim.finish_time)}")
     print(f"Finish times (s): {sim.finish_time} seconds")
-
-    # # plotting results
-    # spaghetti_plot(sim)
-    # histogram_plot(sim)
-    # elevation_headwind_plots(sim)
