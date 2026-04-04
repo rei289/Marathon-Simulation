@@ -9,7 +9,7 @@ on:
       - '**'
 
 jobs:
-  build-and-test:
+  lint-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,11 +25,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install ruff
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Linting check with ruff
         run: |
           ruff check .
+
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13' # specifies the Python version to use
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
 
       - name: Run unit tests
         working-directory: ./tests # where the test files are located
