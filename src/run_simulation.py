@@ -47,8 +47,3 @@ if __name__ == "__main__":
     # print results
     print(f"Average finish time (s): {np.mean(sim.finish_time)}")
     print(f"Finish times (s): {sim.finish_time} seconds")
-
-    # # plotting results
-    # spaghetti_plot(sim)
-    # histogram_plot(sim)
-    # elevation_headwind_plots(sim)
