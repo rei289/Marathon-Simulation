@@ -1,4 +1,4 @@
-name: Deploy and Run Job
+name: Deploy Simulation on Cloud
 
 on:
   workflow_dispatch:

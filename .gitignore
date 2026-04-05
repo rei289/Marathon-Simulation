@@ -11,3 +11,4 @@ marathon_simulation.egg-info/
 .ruff_cache/
 model_coefficients.json
 notes.txt
+.vscode/

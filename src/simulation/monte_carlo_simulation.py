@@ -217,36 +217,42 @@ class MonteCarloSimulation:
 
     def save_to_cloud_results(self, bucket_name: str) -> None:
         """Use to save the results metadata, and configuration of the simulation."""
+        # create a unique job id and base path for storing results in the bucket
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         job_id = f"{ts}_{uuid.uuid4().hex[:8]}"
-        base_path = f"simulations/{job_id}"
+        base_path = f"{job_id}"
 
         client = storage.Client()
         bucket = client.bucket(bucket_name)
 
-        # save summary of results
-        df_summary = pd.DataFrame({
-            "sim_number": self.sim_number,
-            "finish_time": self.finish_time,
-        })
-        buffer_summary = BytesIO()
-        df_summary.to_parquet(buffer_summary, index=False)
-        buffer_summary.seek(0)
-        summary_blob = bucket.blob(f"{base_path}/summary.parquet")
-        summary_blob.upload_from_file(buffer_summary, content_type="application/octet-stream")
-        # # save core results
-        # df_results = pd.DataFrame({
-        #     "time": self.time_elapsed,
-        #     "distance": self.distance_covered,
-        #     "velocity_profile": self.velocity,
-        #     "energy_profile": self.energy,
-        # })
+        # save core results
+        # keep only the simulated steps
+        valid_step_mask = ~np.isnan(self.time_elapsed)
+        step_idx = np.where(valid_step_mask)[0]
+        time_vals = self.time_elapsed[valid_step_mask]
 
-        # buffer_results = BytesIO()
-        # df_results.to_parquet(buffer_results, index=False)
-        # buffer_results.seek(0)
-        # blob = bucket.blob(f"{base_path}/simulation_results.parquet")
-        # blob.upload_from_file(buffer_results, content_type="application/octet-stream")
+        # shape of the following are: (n_valid_steps, num_sim)
+        dist = self.distance_covered[valid_step_mask, :]
+        vel = self.velocity[valid_step_mask, :]
+        eng = self.energy[valid_step_mask, :]
+
+        n_steps = len(step_idx)
+        n_sim = self.num_sim
+
+        df_results = pd.DataFrame({
+            "step": np.repeat(step_idx, n_sim),
+            "time_s": np.repeat(time_vals, n_sim),
+            "sim_number": np.tile(self.sim_number, n_steps),
+            "distance_m": dist.reshape(-1),
+            "velocity_mps": vel.reshape(-1),
+            "energy": eng.reshape(-1),
+        })
+
+        buffer_results = BytesIO()
+        df_results.to_parquet(buffer_results, index=False)
+        buffer_results.seek(0)
+        blob = bucket.blob(f"{base_path}/simulation_results.parquet")
+        blob.upload_from_file(buffer_results, content_type="application/octet-stream")
 
         # save simulation configuration
         config_data = asdict(self.cfg)
@@ -266,13 +272,8 @@ class MonteCarloSimulation:
             content_type="application/json",
         )
 
-
-        # save input parameters
-        # input_data = self.df_input
-
         return {
-            f"gs://{bucket_name}/{base_path}/summary.parquet",
-            # f"gs://{bucket_name}/{base_path}/simulation_results.parquet",
+            f"gs://{bucket_name}/{base_path}/simulation_results.parquet",
             f"gs://{bucket_name}/{base_path}/config.json",
             f"gs://{bucket_name}/{base_path}/metadata.json",
         }
