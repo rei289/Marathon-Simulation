@@ -1,6 +1,5 @@
 -r requirements-prod.txt
-matplotlib==3.10.8
-optuna==4.8.0
+soptuna==4.8.0
 pytest==9.0.2
 Requests==2.33.0
 requests_oauthlib==2.0.0

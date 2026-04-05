@@ -36,6 +36,10 @@ sim_cfg = SimConfig(
 if __name__ == "__main__":
     # get bucket name from environment variable
     bucket_name = os.getenv("BUCKET_NAME")
+
+    if not bucket_name:
+        error = "The BUCKET_NAME environment variable is not set!"
+        raise ValueError(error)
     # get input dataframe for the simulation
     df_input = create_dataframes(params, sim_cfg.num_sim)
 
