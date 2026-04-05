@@ -55,7 +55,8 @@ def get_local_config() -> dict:
     """
     path = Path("config/local_config.yml")
     if not path.exists():
-        raise FileNotFoundError(f"Local config file not found at: {path}")
+        error = f"Local config file not found at: {path}"
+        raise FileNotFoundError(error)
 
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
