@@ -1,45 +1,9 @@
-# name: Deploy and Run Job
-
-# on:
-#   push:
-#     branches: [ "main" ]
-
-# jobs:
-#   deploy-and-run:
-#     runs-on: ubuntu-latest
-#     permissions:
-#       contents: 'read'
-#       id-token: 'write'
-
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v4
-
-#       # 1. Authenticate using Secrets
-#       - id: 'auth'
-#         uses: 'google-github-actions/auth@v2'
-#         with:
-#           # We construct the provider string using the Project Number secret
-#           workload_identity_provider: 'projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
-#           service_account: '${{ secrets.GCP_SA_EMAIL }}'
-
-#       # 2. Deploy and Run the Job using Secrets
-#       - name: 'Deploy Cloud Run Job'
-#         uses: 'google-github-actions/deploy-cloudrun@v2'
-#         with:
-#           job: 'my-python-test'
-#           source: '.'
-#           region: 'us-central1'
-#           project_id: '${{ secrets.GCP_PROJECT_ID }}'
-#           env_vars: |
-#             BUCKET_NAME=${{ vars.GCP_SIMULATION_BUCKET_NAME }}
-#           flags: '--execute-now'
-
 name: Deploy and Run Job
 
 on:
-  push:
-    branches: [ "main" ]
+  workflow_dispatch:
+  # push:
+  #   branches: [ "main" ]
 
 jobs:
   deploy:
