@@ -1,3 +1,40 @@
+# name: Deploy and Run Job
+
+# on:
+#   push:
+#     branches: [ "main" ]
+
+# jobs:
+#   deploy-and-run:
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: 'read'
+#       id-token: 'write'
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       # 1. Authenticate using Secrets
+#       - id: 'auth'
+#         uses: 'google-github-actions/auth@v2'
+#         with:
+#           # We construct the provider string using the Project Number secret
+#           workload_identity_provider: 'projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+#           service_account: '${{ secrets.GCP_SA_EMAIL }}'
+
+#       # 2. Deploy and Run the Job using Secrets
+#       - name: 'Deploy Cloud Run Job'
+#         uses: 'google-github-actions/deploy-cloudrun@v2'
+#         with:
+#           job: 'my-python-test'
+#           source: '.'
+#           region: 'us-central1'
+#           project_id: '${{ secrets.GCP_PROJECT_ID }}'
+#           env_vars: |
+#             BUCKET_NAME=${{ vars.GCP_SIMULATION_BUCKET_NAME }}
+#           flags: '--execute-now'
+
 name: Deploy and Run Job
 
 on:
@@ -5,32 +42,50 @@ on:
     branches: [ "main" ]
 
 jobs:
-  deploy-and-run:
+  deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
       id-token: 'write'
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # 1. Authenticate using Secrets
+      # 1. Authenticate to Google Cloud
       - id: 'auth'
         uses: 'google-github-actions/auth@v2'
         with:
-          # We construct the provider string using the Project Number secret
           workload_identity_provider: 'projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
           service_account: '${{ secrets.GCP_SA_EMAIL }}'
 
-      # 2. Deploy and Run the Job using Secrets
-      - name: 'Deploy Cloud Run Job'
+      # 2. Login to Docker (so GitHub can push to GCP)
+      - name: Docker Auth
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      # 3. Build and Push the Image
+      # We tag it with the 'latest' label to keep things simple
+      - name: Build and Push Container
+        run: |
+          DOCKER_TAG="us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/my-python-test:latest"
+          docker build -t $DOCKER_TAG .
+          docker push $DOCKER_TAG
+
+      # 4. Deploy to Cloud Run Job using the IMAGE
+      - name: 'Deploy to Cloud Run Job'
         uses: 'google-github-actions/deploy-cloudrun@v2'
         with:
           job: 'my-python-test'
-          source: '.'
           region: 'us-central1'
-          project_id: '${{ secrets.GCP_PROJECT_ID }}'
+          image: 'us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/my-python-test:latest'
           env_vars: |
-            BUCKET_NAME=${{ vars.GCP_SIMULATION_BUCKET_NAME }}
+            BUCKET_NAME=${{ secrets.GCP_BUCKET_NAME }}
           flags: '--execute-now'
+
+      # 5. Cleanup "Untagged" Images (The $0.00 bill insurance)
+      # This deletes the hidden 'old versions' that Google stores behind the scenes
+      - name: Cleanup Registry
+        run: |
+          gcloud artifacts docker images delete \
+          us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/my-python-test \
+          --delete-tags --quiet --filter="NOT tags:latest" || true
