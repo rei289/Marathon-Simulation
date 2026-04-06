@@ -31,7 +31,7 @@ jobs:
       - name: Build and Push Container
         run: |
           DOCKER_TAG="us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/my-python-test:latest"
-          docker build -f Dockerfile_Simulation -t $DOCKER_TAG .
+          docker build -f Simulation.Dockerfile -t $DOCKER_TAG .
           docker push $DOCKER_TAG
 
       # 4. Deploy to Cloud Run Job using the IMAGE
