@@ -2,6 +2,7 @@
 import os
 
 import numpy as np
+from dotenv import load_dotenv
 
 from src.simulation.data_classes import Params, SimConfig
 from src.simulation.monte_carlo_simulation import (
@@ -34,12 +35,6 @@ sim_cfg = SimConfig(
 )
 
 if __name__ == "__main__":
-    # get bucket name from environment variable
-    bucket_name = os.getenv("BUCKET_NAME")
-
-    if not bucket_name:
-        error = "The BUCKET_NAME environment variable is not set!"
-        raise ValueError(error)
     # get input dataframe for the simulation
     df_input = create_dataframes(params, sim_cfg.num_sim)
 
@@ -50,7 +45,31 @@ if __name__ == "__main__":
 
     # perform the simulation
     sim.run()
-    sim.save_to_cloud_results(bucket_name, simulation_folder="03_simulations")
+
+    # determine execution environment
+    execution_env = os.getenv("EXECUTION_ENV", "unknown")
+
+    if execution_env == "local":
+        print("Running in local environment")
+        # save results to local file system
+        load_dotenv()
+        bucket_name = os.getenv("BUCKET_NAME", "local_results")
+        sim.save_to_local_results(bucket_name, simulation_folder="03_simulations")
+
+
+    elif execution_env == "gcp":
+        print("Running in GCP environment")
+
+        # get bucket name from environment variable
+        bucket_name = os.getenv("BUCKET_NAME")
+        if not bucket_name:
+            error = "The BUCKET_NAME environment variable is not set!"
+            raise ValueError(error)
+
+        # save results to cloud storage
+        sim.save_to_cloud_results(bucket_name, simulation_folder="03_simulations")
+    else:
+        print(f"Running in unknown environment: {execution_env}")
 
     # print results
     print(f"Average finish time (s): {np.mean(sim.finish_time)}")

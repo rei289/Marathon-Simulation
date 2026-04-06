@@ -1,16 +1,8 @@
 google-cloud-storage==3.3.1
-matplotlib==3.10.8
 numpy==2.4.4
-optuna==4.8.0
 pandas==3.0.1
 pyarrow
 pandas==3.0.1
 python_dateutil==2.9.0.post0
 python-dotenv==1.2.2
-pytest==9.0.2
-PyYAML==6.0.3
 Requests==2.33.0
-ruff==0.15.9
-scikit_learn==1.8.0
-scipy==1.17.1
-shap==0.51.0

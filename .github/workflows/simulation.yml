@@ -44,6 +44,7 @@ jobs:
           image: 'us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/my-python-test:latest'
           env_vars: |
             BUCKET_NAME=${{ vars.GCP_BUCKET_NAME }}
+            EXECUTION_ENV=gcp
           flags: '--execute-now'
 
       # 5. Cleanup "Untagged" Images (The $0.00 bill insurance)

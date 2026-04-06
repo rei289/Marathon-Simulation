@@ -1,27 +1,34 @@
 services:
   simulation:
-    build: .
+    build:
+      context: .
+      dockerfile: Simulation.Dockerfile
+    user: "${UID}:${GID}"
     working_dir: /app
-    command: python -m src.run_simulation
+    command: python -m src.main_simulation
     volumes:
       - .:/app
     environment:
       - PYTHONUNBUFFERED=1
+      - EXECUTION_ENV=local
   
   retrieve_runs:
     build: .
+    user: "${UID}:${GID}"
     working_dir: /app
-    command: python -m src.retrieve_run
+    command: python -m src.main_runs
     volumes:
       - .:/app
     environment:
       - PYTHONUNBUFFERED=1
+      - EXECUTION_ENV=local
 
   model_training:
     build: .
     working_dir: /app
-    command: python -m src.model_fit
+    command: python -m src.main_fitting
     volumes:
       - .:/app
     environment:
       - PYTHONUNBUFFERED=1
+      - EXECUTION_ENV=local

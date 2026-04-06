@@ -220,7 +220,7 @@ class MonteCarloSimulation:
         # create a unique job id and base path for storing results in the bucket
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         job_id = f"{ts}_{uuid.uuid4().hex[:8]}"
-        base_path = f"/{simulation_folder}/{job_id}"
+        base_path = f"{simulation_folder}/{job_id}"
 
         client = storage.Client()
         bucket = client.bucket(bucket_name)
@@ -272,12 +272,54 @@ class MonteCarloSimulation:
             content_type="application/json",
         )
 
-        return {
-            f"gs://{bucket_name}/{base_path}/simulation_results.parquet",
-            f"gs://{bucket_name}/{base_path}/config.json",
-            f"gs://{bucket_name}/{base_path}/metadata.json",
-        }
+    def save_to_local_results(self, bucket_name: str, simulation_folder: str) -> None:
+        """Use to save the results metadata, and configuration of the simulation."""
+        # create a unique job id and base path for storing results in the bucket
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        job_id = f"{ts}_{uuid.uuid4().hex[:8]}"
+        base_path = f"{bucket_name}/{simulation_folder}/{job_id}"
 
+        # create output folder if it doesn't exist
+        output_folder_path = Path(base_path)
+        output_folder_path.mkdir(parents=True, exist_ok=True)
+
+        # save core results
+        # keep only the simulated steps
+        valid_step_mask = ~np.isnan(self.time_elapsed)
+        step_idx = np.where(valid_step_mask)[0]
+        time_vals = self.time_elapsed[valid_step_mask]
+
+        # shape of the following are: (n_valid_steps, num_sim)
+        dist = self.distance_covered[valid_step_mask, :]
+        vel = self.velocity[valid_step_mask, :]
+        eng = self.energy[valid_step_mask, :]
+
+        n_steps = len(step_idx)
+        n_sim = self.num_sim
+
+        df_results = pd.DataFrame({
+            "step": np.repeat(step_idx, n_sim),
+            "time_s": np.repeat(time_vals, n_sim),
+            "sim_number": np.tile(self.sim_number, n_steps),
+            "distance_m": dist.reshape(-1),
+            "velocity_mps": vel.reshape(-1),
+            "energy": eng.reshape(-1),
+        })
+        df_results.to_csv(output_folder_path / "simulation_results.csv", index=False)
+
+        # save simulation configuration
+        config_data = asdict(self.cfg)
+        config_file_path = output_folder_path / "config.json"
+        config_file_path.write_text(json.dumps(config_data, indent=4))
+
+        # save metadata
+        metadata = {
+            "job_id": job_id,
+            "created_at": ts,
+            "bucket": bucket_name,
+        }
+        metadata_file_path = output_folder_path / "metadata.json"
+        metadata_file_path.write_text(json.dumps(metadata, indent=4))
 
 def create_dataframes(params: Params, num_sample: int, seed: int=42) -> pd.DataFrame:
     """Use to create input dataframe which can then be used to run the simulation."""
