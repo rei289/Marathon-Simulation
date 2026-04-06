@@ -22,10 +22,10 @@ class VisualCrossingDataRetriever:
     def _load_credentials(self) -> None:
         """Load Visual Crossing API credentials from environment variables."""
         load_dotenv()
-        self.api_key = os.getenv("API_KEY")
+        self.api_key = os.getenv("VISUAL_CROSSING_API_KEY")
 
         if not self.api_key:
-            error_message = "API_KEY must be set in environment variables. Please create a .env file with this value."
+            error_message = "VISUAL_CROSSING_API_KEY must be set in environment variables. Please create a .env file with this value."
             raise ValueError(error_message)
 
     def get_weather_openweather(self, json_data: dict[str, Any]) -> dict[str, Any]:

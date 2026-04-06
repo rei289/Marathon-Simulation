@@ -19,9 +19,7 @@ def retrieve_run(num_runs: int = 10, output_folder: str = "data") -> None:
     strava_retriever = StravaDataRetriever()
     visual_crossing_retriever = VisualCrossingDataRetriever()
 
-    # now we want to retrieve the data from the past 10 runs
-    strava_retriever.authenticate()  # ensure authentication is done before retrieving data
-
+    # now we want to retrieve the data from the past # runs specified by the user
     # fetch activities
     activities = strava_retriever.fetch_activities()
 

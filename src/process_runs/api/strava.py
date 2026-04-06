@@ -7,9 +7,8 @@ It organizes the functionality into logical components for better maintainabilit
 import os
 from typing import Any
 
-from dateutil import parser
-from dotenv import load_dotenv
-from requests_oauthlib import OAuth2Session
+import requests
+from dotenv import load_dotenv, set_key
 
 
 class StravaDataRetriever:
@@ -23,69 +22,79 @@ class StravaDataRetriever:
 
         """
         self.output_folder = output_folder
-        self.session = None
         self._load_credentials()
+        self.token_url = "https://www.strava.com/oauth/token" # noqa: S105
+        self.api_base = "https://www.strava.com/api/v3"
 
     def _load_credentials(self) -> None:
         """Load Strava API credentials from environment variables."""
         load_dotenv()
-        self.client_id = os.getenv("CLIENT_ID")
-        self.client_secret = os.getenv("CLIENT_SECRET")
-        self.redirect_url = "https://localhost"
+        self.client_id = os.getenv("STRAVA_CLIENT_ID")
+        self.client_secret = os.getenv("STRAVA_CLIENT_SECRET")
+        self.refresh_token = os.getenv("STRAVA_REFRESH_TOKEN")
+        self.access_token = None
 
         if not self.client_id or not self.client_secret:
-            message = "CLIENT_ID and CLIENT_SECRET must be set in environment variables. Please create a .env file with these values."
+            message = "STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET must be set in environment variables. Please create a .env file with these values."
             raise ValueError(message)
 
-    def authenticate(self) -> None:
-        """Use to handle OAuth2 authentication with Strava."""
-        # create OAuth2 session
-        self.session = OAuth2Session(
-            client_id=self.client_id,
-            redirect_uri=self.redirect_url,
-            scope=["activity:read_all"],
+    def refresh_access_token(self) -> None:
+        """Use to refresh the Strava access token using the refresh token."""
+        if not self.refresh_token:
+            message = "Missing STRAVA_REFRESH_TOKEN in .env. Please create a .env file with this value."
+            raise ValueError(message)
+
+        payload = {
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "grant_type": "refresh_token",
+            "refresh_token": self.refresh_token,
+        }
+        response = requests.post(
+            self.token_url,
+            data=payload,
+            timeout=30,
         )
+        response.raise_for_status()
+        token_data = response.json()
+        self.access_token = token_data["access_token"]
 
-        # get authorization URL
-        auth_url, _ = self.session.authorization_url("https://www.strava.com/oauth/authorize")
-        print(f"👉 Click this URL to authorize access:\n{auth_url}")
+        # strava may rotate refresh_token; persist latest value
+        new_refresh = token_data.get("refresh_token")
+        if new_refresh and new_refresh != self.refresh_token:
+            self.refresh_token = new_refresh
+            set_key(".env", "STRAVA_REFRESH_TOKEN", new_refresh)
 
-        # get redirect response from user
-        redirect_response = input("\n🔁 Paste the full redirect URL after approving: ")
-
-        # fetch access token
-        token_url = "https://www.strava.com/api/v3/oauth/token" # noqa: S105
-        _token = self.session.fetch_token(
-            token_url=token_url,
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            authorization_response=redirect_response,
-            include_client_id=True,
-        )
-
-        print("✅ Authentication successful!")
+    def _auth_headers(self) -> dict[str, str]:
+        """Use to generate authorization headers for Strava API requests."""
+        if not self.access_token:
+            self.refresh_access_token()
+        return {"Authorization": f"Bearer {self.access_token}"}
 
     def fetch_activities(self, per_page: int = 50, page: int = 1) -> list[dict[str, Any]]:
-        """Use to fetch activities from Strava API.
+        """Use to fetch activities from Strava API."""
+        r = requests.get(
+            f"{self.api_base}/athlete/activities",
+            headers=self._auth_headers(),
+            params={"per_page": per_page, "page": page},
+            timeout=30,
+        )
+        r.raise_for_status()
+        return r.json()
 
-        Args:
-            per_page (int): Number of activities per page
-            page (int): Page number to fetch
-
-        Returns:
-            list[dict[str, Any]]: list of activity data
-
-        """
-        if not self.session:
-            error_message = "Must authenticate before fetching activities. Call the authenticate() method first."
-            raise ValueError(error_message)
-
-        print("\n📥 Fetching your latest activities...")
-        activities_url = "https://www.strava.com/api/v3/athlete/activities"
-        params = {"per_page": per_page, "page": page}
-        response = self.session.get(activities_url, params=params)
-        response.raise_for_status()
-        return response.json()
+    def fetch_activity_streams(self, run_id: int) -> dict[str, Any]:
+        """Use to fetch detailed stream data for a specific activity."""
+        r = requests.get(
+            f"{self.api_base}/activities/{run_id}/streams",
+            headers=self._auth_headers(),
+            params={
+                "keys": "time,heartrate,cadence,distance,altitude,velocity_smooth,grade_smooth,moving,latlng",
+                "key_by_type": "true",
+            },
+            timeout=30,
+        )
+        r.raise_for_status()
+        return r.json()
 
     def filter_runs(self, activities: list[dict[str, Any]], limit: int = 10) -> list[dict[str, Any]]:
         """Use to filter activities to get only runs.
@@ -101,34 +110,6 @@ class StravaDataRetriever:
         runs = [act for act in activities if act.get("type") == "Run"][:limit]
         print(f"📊 Found {len(runs)} recent runs")
         return runs
-
-    def _create_date_string(self, start_date: str) -> str:
-        """Convert start date to formatted string."""
-        return parser.isoparse(start_date).strftime("%Y-%m-%d_%H-%M")
-
-
-    def fetch_activity_streams(self, run_id: int) -> dict[str, Any]:
-        """Use to fetch detailed stream data for a specific activity.
-
-        Args:
-            run_id (int): Strava activity ID
-
-        Returns:
-            dict[str, Any]: Stream data from Strava
-
-        """
-        if not self.session:
-            error_message = "Must authenticate before fetching streams. Call the authenticate() method first."
-            raise ValueError(error_message)
-
-        streams_url = f"https://www.strava.com/api/v3/activities/{run_id}/streams"
-        params = {
-            "keys": "time,heartrate,cadence,distance,altitude,velocity_smooth,grade_smooth,moving,latlng",
-            "key_by_type": "true",
-        }
-        streams_response = self.session.get(streams_url, params=params)
-        streams_response.raise_for_status()
-        return streams_response.json()
 
     def _pad_list(self, lst: list[Any], target_length: int) -> list[Any]:
         """Pad list with None values to reach target length."""
@@ -220,7 +201,8 @@ class StravaDataRetriever:
         activity_id = run.get("id")
         # fetch detailed activity data (resource state 3)
         detailed_url = f"https://www.strava.com/api/v3/activities/{activity_id}"
-        detailed_response = self.session.get(detailed_url)
+        detailed_response = requests.get(detailed_url, headers=self._auth_headers(), timeout=30)
+        detailed_response.raise_for_status()
         detailed_run = detailed_response.json()
         # extract relevant fields for JSON
         return {
