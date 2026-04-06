@@ -215,12 +215,12 @@ class MonteCarloSimulation:
 
             self.iteration = step + 1
 
-    def save_to_cloud_results(self, bucket_name: str) -> None:
+    def save_to_cloud_results(self, bucket_name: str, simulation_folder: str) -> None:
         """Use to save the results metadata, and configuration of the simulation."""
         # create a unique job id and base path for storing results in the bucket
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         job_id = f"{ts}_{uuid.uuid4().hex[:8]}"
-        base_path = f"{job_id}"
+        base_path = f"/{simulation_folder}/{job_id}"
 
         client = storage.Client()
         bucket = client.bucket(bucket_name)

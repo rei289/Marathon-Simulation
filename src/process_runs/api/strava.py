@@ -14,14 +14,8 @@ from dotenv import load_dotenv, set_key
 class StravaDataRetriever:
     """A class to handle Strava API authentication and data retrieval."""
 
-    def __init__(self, output_folder: str = "data") -> None:
-        """Initialize the Strava data retriever.
-
-        Args:
-            output_folder (str): The folder where data will be saved
-
-        """
-        self.output_folder = output_folder
+    def __init__(self) -> None:
+        """Initialize the Strava data retriever. Load credentials and set up API endpoints."""
         self._load_credentials()
         self.token_url = "https://www.strava.com/oauth/token" # noqa: S105
         self.api_base = "https://www.strava.com/api/v3"

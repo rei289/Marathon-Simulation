@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     # perform the simulation
     sim.run()
-    sim.save_to_cloud_results(bucket_name)
+    sim.save_to_cloud_results(bucket_name, simulation_folder="03_simulations")
 
     # print results
     print(f"Average finish time (s): {np.mean(sim.finish_time)}")
