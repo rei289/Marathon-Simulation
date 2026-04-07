@@ -35,9 +35,8 @@ sim_cfg = SimConfig(
 )
 
 if __name__ == "__main__":
-    # get input dataframe for the simulation
+    # @fix make this more flexible by allowing the user to specify the date of the run to use for fitting the model parameters
     df_input = create_dataframes(params, sim_cfg.num_sim)
-
     csv_data=None
     json_data=None
 

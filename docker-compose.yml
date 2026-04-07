@@ -25,8 +25,11 @@ services:
       - PYTHONUNBUFFERED=1
       - EXECUTION_ENV=local
 
-  model_training:
-    build: .
+  trainings:
+    build:
+      context: .
+      dockerfile: Trainings.Dockerfile
+    user: "${UID}:${GID}"
     working_dir: /app
     command: python -m src.main_trainings
     volumes:

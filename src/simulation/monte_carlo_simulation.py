@@ -30,7 +30,7 @@ from src.utilis.helper import get_constant_params
 class MonteCarloSimulation:
     """Class to run a Monte Carlo simulation of the marathon model with varying parameters and conditions."""
 
-    def __init__(self, cfg: SimConfig, df_input: pd.DataFrame, csv_data: str|None, json_data: str|None) -> None:
+    def __init__(self, cfg: SimConfig, df_input: pd.DataFrame, parquet_data: str|None, json_data: str|None) -> None:
         """Use to initialize the simulation with the given configuration, input parameters, and optional course and weather data."""
         self.target_dist = cfg.target_dist
         self.num_sim = cfg.num_sim
@@ -40,7 +40,8 @@ class MonteCarloSimulation:
         # create unique simulation ids for every trajectory which we can use to track the results across different data structures
         self.sim_number = np.array([f"sim_{i}" for i in range(self.num_sim)])
 
-        self.df = pd.read_csv(csv_data)[["distance_m", "grade_percent", "headwind_mps"]].fillna(0) if csv_data is not None \
+        self.df = pd.read_parquet(parquet_data, engine="pyarrow")[["distance_m", "grade_percent", "headwind_mps"]].fillna(0) \
+                                        if parquet_data is not None \
                                         else pd.DataFrame({"distance_m": [0], "grade_percent": [0], "headwind_mps": [0]})
 
         if json_data is not None:

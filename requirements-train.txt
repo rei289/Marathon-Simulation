@@ -1,0 +1,9 @@
+google-cloud-storage==3.3.1
+numpy==2.4.4
+optuna==4.8.0
+pandas==3.0.1
+pyarrow
+python_dateutil==2.9.0.post0
+python-dotenv==1.2.2
+PyYAML==6.0.3
+scipy==1.17.1

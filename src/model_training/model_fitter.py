@@ -11,18 +11,17 @@ from scipy.signal import butter, filtfilt
 
 from src.simulation.data_classes import SimConfig
 from src.simulation.monte_carlo_simulation import MonteCarloSimulation
-from src.simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy
 
 
 class ModelFitter:
     """Use class to fit the model parameters to the data."""
 
-    def __init__(self, csv_path: str, json_path: str) -> None:
+    def __init__(self, parquet_path: str, json_path: str) -> None:
         """Initialize the model fitter with the paths to the csv and json data."""
-        self.csv_path = csv_path
+        self.parquet_path = parquet_path
         self.json_path = json_path
 
-        df = pd.read_csv(csv_path)
+        df = pd.read_parquet(parquet_path, engine="pyarrow")
         # expected: time (s), distance (m), velocity (m/s)
         df["time_datetime"] = pd.to_datetime(df["time_datetime"])
         t_obs = (df["time_datetime"] - df["time_datetime"].iloc[0]).dt.total_seconds().to_numpy()
@@ -63,11 +62,8 @@ class ModelFitter:
             dt=0.1,
             max_steps=20000,
             const_v=params["const_v"],
-            t1=None,
-            t2=None,
+            pacing=params["pacing"],
         )
-
-        pacing_strategy = ConstantPaceStrategy(sim_cfg) if params["pacing"] == "constant" else EvenEffortStrategy(sim_cfg)
 
         # create input dataframe
         df_input = pd.DataFrame({
@@ -86,7 +82,7 @@ class ModelFitter:
         })
 
         # run simulation
-        sim = MonteCarloSimulation(sim_cfg, pacing_strategy, df_input=df_input, csv_data=self.csv_path, json_data=self.json_path)
+        sim = MonteCarloSimulation(sim_cfg, df_input=df_input, parquet_data=self.parquet_path, json_data=self.json_path)
         sim.run()
 
         # get the velocity and time arrays from the simulation and make it into a pandas dataframe
@@ -111,7 +107,7 @@ class ModelFitter:
         convection = trial.suggest_float("convection", 10.0, 10.0)
         alpha = trial.suggest_float("alpha", 0.6, 0.8)
         psi = trial.suggest_float("psi", 0.003, 0.007)
-        pacing = trial.suggest_categorical("pacing", ["constant", "even_effort"])
+        pacing = trial.suggest_categorical("pacing", ["constant velocity", "even effort"])
         const_v = trial.suggest_float("const_v", 4.0, 5.0)
 
 
@@ -182,7 +178,7 @@ def model_fitting(date: str, bucket_name: str, train_folder: str = "02_trainings
     json_data = f"{bucket_name}/01_runs/{date}/overall.json"
 
     # create the model fitter class
-    fitter = ModelFitter(csv_path = parquet_data, json_path = json_data)
+    fitter = ModelFitter(parquet_path = parquet_data, json_path = json_data)
 
     # create a study object
     study = optuna.create_study(direction="minimize")
@@ -209,9 +205,9 @@ def model_fitting(date: str, bucket_name: str, train_folder: str = "02_trainings
     data["run_date"] = date
 
     # delete the model_coefficients.json if it exists
-    file = Path(f"{bucket_name}/{train_folder}/{date}/model_coefficients.json")
-    if Path.exists(file):
-        Path.unlink(file)
+    output_folder_path = Path(f"{bucket_name}/{train_folder}/{date}")
+    output_folder_path.mkdir(parents=True, exist_ok=True)
+    file = output_folder_path / "model_coefficients.json"
 
     file.write_text(json.dumps(data, indent=4))
 
