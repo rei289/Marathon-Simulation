@@ -14,4 +14,4 @@ RUN pip install --no-cache-dir --prefer-binary -r requirements-sim.txt
 COPY . .
 
 # default command
-CMD ["python", "-m", "src.main_simulation"]
+CMD ["python", "-m", "src.main_simulations"]

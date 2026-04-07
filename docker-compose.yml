@@ -1,11 +1,11 @@
 services:
-  simulation:
+  simulations:
     build:
       context: .
-      dockerfile: Simulation.Dockerfile
+      dockerfile: Simulations.Dockerfile
     user: "${UID}:${GID}"
     working_dir: /app
-    command: python -m src.main_simulation
+    command: python -m src.main_simulations
     volumes:
       - .:/app
     environment:
@@ -28,7 +28,7 @@ services:
   model_training:
     build: .
     working_dir: /app
-    command: python -m src.main_fitting
+    command: python -m src.main_trainings
     volumes:
       - .:/app
     environment:

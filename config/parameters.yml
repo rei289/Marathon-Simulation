@@ -2,7 +2,7 @@ version: 1
 
 metadata:
   project: Marathon_Simulation
-  description: All parameters used in the simulation and their properties
+  description: All parameters used in the simulation and their limits for sampling and validation
 
 physical:
   velocity:

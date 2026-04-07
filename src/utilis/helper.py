@@ -42,6 +42,21 @@ def get_param_info(param_name: str, config_path: str | Path = "config/parameters
     param_info["unit"] = units(param_info["unit"])
     return param_info
 
+def get_constant_params(param_name: str, config_path: str | Path = "config/constants.yml") -> float:
+    """Get constant parameter value from YAML."""
+    path = Path(config_path)
+    with path.open("r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
+    if param_name in cfg.get("physics", {}):
+        name = "physics"
+    else:
+        error = f"Parameter '{param_name}' not found in {config_path}."
+        raise KeyError(error)
+    # get parameter value
+    param = cfg[name][param_name]
+    return param["value"]
+
 def get_local_config() -> dict:
     """Get local config from config/local_config.yml.
 
