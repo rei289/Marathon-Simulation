@@ -305,7 +305,7 @@ class MonteCarloSimulation:
             "velocity_mps": vel.reshape(-1),
             "energy": eng.reshape(-1),
         })
-        df_results.to_csv(output_folder_path / "simulation_results.csv", index=False)
+        df_results.to_parquet(output_folder_path / "simulation_results.parquet", index=False)
 
         # save simulation configuration
         config_data = asdict(self.cfg)

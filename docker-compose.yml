@@ -12,8 +12,10 @@ services:
       - PYTHONUNBUFFERED=1
       - EXECUTION_ENV=local
   
-  retrieve_runs:
-    build: .
+  runs:
+    build:
+      context: .
+      dockerfile: Runs.Dockerfile
     user: "${UID}:${GID}"
     working_dir: /app
     command: python -m src.main_runs

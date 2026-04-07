@@ -8,12 +8,12 @@ from src.process_runs.api.visual_crossing import VisualCrossingDataRetriever
 from src.process_runs.process_data import DataProcessor
 
 
-def retrieve_run(num_runs: int = 10, output_folder: str = "data") -> None:
+def retrieve_run(num_runs: int, bucket_name: str, runs_folder: str = "01_runs") -> None:
     """Use to retrieve data from Strava and Visual Crossing."""
     # ensure the output folder exists
-    output_folder_path = Path(output_folder)
+    output_folder_path = Path(f"{bucket_name}/{runs_folder}")
     if not output_folder_path.exists():
-        output_folder_path.mkdir(exist_ok=True)
+        output_folder_path.mkdir(exist_ok=True, parents=True)
 
     # initialize data retrievers
     strava_retriever = StravaDataRetriever()
@@ -27,7 +27,7 @@ def retrieve_run(num_runs: int = 10, output_folder: str = "data") -> None:
     runs = strava_retriever.filter_runs(activities, limit=num_runs)
 
     # setup output folder
-    print(f"\n📁 Saving data to folder: {output_folder}\n")
+    print(f"\n📁 Saving data to folder: {bucket_name}/{runs_folder}\n")
 
     # process each run
     for i, run in enumerate(runs, 1):
@@ -42,8 +42,8 @@ def retrieve_run(num_runs: int = 10, output_folder: str = "data") -> None:
         run_folder_path.mkdir(exist_ok=True)
 
         # check this run data to make sure all its componets are present
-        # csv file data
-        csv_data = strava_retriever.parse_to_csv(run)
+        # parquet file data
+        parquet_data = strava_retriever.parse_to_parquet(run)
 
         # json file data
         json_data = strava_retriever.parse_to_json(run)
@@ -52,16 +52,16 @@ def retrieve_run(num_runs: int = 10, output_folder: str = "data") -> None:
         json_data["weather"] = visual_crossing_retriever.get_weather_openweather(json_data)
 
         # CLEAN UP DATA AND PERFORM FEATURE ENGINEERING HERE
-        data_processor = DataProcessor(csv_data, json_data)
+        data_processor = DataProcessor(parquet_data, json_data)
         # clean and perform feature engineering
         data_processor.process()
 
         # Save to JSON
-        json_filename = f"{date_str}_overall.json"
+        json_filename = "overall.json"
         data_processor.save_to_json(run_folder_path, json_filename)
 
-        # Save to CSV
-        csv_filename = f"{date_str}_streams.csv"
-        data_processor.save_to_csv(run_folder_path, csv_filename)
+        # Save to parquet
+        parquet_filename = "streams.parquet"
+        data_processor.save_to_parquet(run_folder_path, parquet_filename)
 
     print("\n✅ Done saving all running data!")

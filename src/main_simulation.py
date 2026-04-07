@@ -55,8 +55,6 @@ if __name__ == "__main__":
         load_dotenv()
         bucket_name = os.getenv("BUCKET_NAME", "local_results")
         sim.save_to_local_results(bucket_name, simulation_folder="03_simulations")
-
-
     elif execution_env == "gcp":
         print("Running in GCP environment")
 
@@ -73,4 +71,3 @@ if __name__ == "__main__":
 
     # print results
     print(f"Average finish time (s): {np.mean(sim.finish_time)}")
-    print(f"Finish times (s): {sim.finish_time} seconds")

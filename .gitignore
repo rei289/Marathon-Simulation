@@ -12,3 +12,5 @@ marathon_simulation.egg-info/
 model_coefficients.json
 notes.txt
 .vscode/
+/local_results
+/running_simulation_data

@@ -1,15 +1,9 @@
 """File contains utility functions for project."""
-import json
 from functools import lru_cache
 from pathlib import Path
 
 import yaml
 
-
-def extract_global_json(var_name: str) -> str | float | int | bool | list | dict:
-    """Extract a variable from globals.json."""
-    config = json.loads(Path("globals.json").read_text(encoding="utf-8"))
-    return config[var_name]
 
 @lru_cache(maxsize=1)
 def load_units(config_path: str | Path = "config/units.yml") -> dict:

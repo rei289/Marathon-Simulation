@@ -129,8 +129,8 @@ class StravaDataRetriever:
                 lng.append(None)
         return lat, lng
 
-    def parse_to_csv(self, run: dict[str, Any]) -> dict[str, Any]:
-        """Use to parse run data to CSV format.
+    def parse_to_parquet(self, run: dict[str, Any]) -> dict[str, Any]:
+        """Use to parse run data to Parquet format.
 
         Args:
             run (dict[str, Any]): Run data
