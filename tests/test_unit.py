@@ -5,7 +5,7 @@ import pytest
 
 from src.simulation.data_classes import PacingContext, Params, SimConfig
 from src.simulation.monte_carlo_simulation import MonteCarloSimulation, create_dataframes
-from src.simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy
+from src.simulation.pacing_strategy import PacingStrategy
 from src.utilis.helper import get_param_info
 
 
@@ -17,9 +17,6 @@ def sim_cfg() -> SimConfig:
         num_sim=1,
         dt=0.1,
         max_steps=10000,
-        const_v=5.0,
-        t1=None,
-        t2=None,
     )
 
 @pytest.fixture
@@ -38,6 +35,8 @@ def params() -> Params:
         convection=[10.0],
         alpha=[0.7],
         psi=[0.005],
+        pacing_strat=["constant velocity"],
+        const_v=[5.0],
     )
 
 @pytest.fixture
@@ -55,17 +54,15 @@ def ctx() -> PacingContext:
         drag_coefficient=np.array([1.0]),
         frontal_area=np.array([0.5]),
         f_max=np.array([10.0]),
-        g=9.81,
+        const_v=np.array([5.0]),
     )
 
 @pytest.fixture
 def sim(sim_cfg: SimConfig, params: Params) -> MonteCarloSimulation:
     """Fixture to create a MonteCarloSimulation instance for testing."""
-    strat = ConstantPaceStrategy(sim_cfg)
-
     df_input = create_dataframes(params, sim_cfg.num_sim)
 
-    return MonteCarloSimulation(sim_cfg, strat, df_input=df_input, csv_data=None, json_data=None)
+    return MonteCarloSimulation(sim_cfg, df_input=df_input, csv_data=None, json_data=None)
 
 # overall simulation tests
 def test_finish_time(sim: MonteCarloSimulation) -> None:
@@ -103,14 +100,14 @@ def test_energy_lower_than_initial(sim: MonteCarloSimulation) -> None:
 # pacing strategy tests
 def test_constant_pace_strategy(sim_cfg: SimConfig, ctx: PacingContext) -> None:
     """Test that the ConstantPaceStrategy returns the correct target velocity."""
-    strat = ConstantPaceStrategy(sim_cfg)
-    target_velocity = strat.get_target_velocity(ctx)
+    strat = PacingStrategy(sim_cfg)
+    target_velocity = strat.constant_pace(ctx)
     assert np.all(target_velocity == 5.0)
 
 def test_even_effort_strategy(sim_cfg: SimConfig, ctx: PacingContext) -> None:
     """Test that the EvenEffortStrategy returns a target velocity that is not zero."""
-    strat = EvenEffortStrategy(sim_cfg)
-    target_velocity = strat.get_target_velocity(ctx)
+    strat = PacingStrategy(sim_cfg)
+    target_velocity = strat.even_effort_pace(ctx)
     assert np.all(target_velocity > 0.0)
 
 # boundary condition tests

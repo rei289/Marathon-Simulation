@@ -2,8 +2,7 @@
 
 from dataclasses import asdict
 
-import pandas as pd
-from sensitivity_shap import generate_lhs_samples, run_shap_analysis
+from sensitivity_shap import build_mixed_input_dataframe, run_shap_analysis
 
 from src.simulation.data_classes import Params, SimConfig
 from src.simulation.monte_carlo_simulation import MonteCarloSimulation
@@ -22,27 +21,24 @@ if __name__ == "__main__":
         convection=[10.0, 12.0],
         alpha=[0.6, 0.8],
         psi=[0.003, 0.007],
+        pacing_strat=["constant velocity", "even effort"],
+        const_v=[4.0, 6.0],
     )
 
     sim_cfg = SimConfig(
         target_dist=4300,
         num_sim=10000,
         dt=0.1,
-        max_steps=10000,
-        const_v=5.0,
-        pacing="constant velocity",
+        max_steps=20000,
     )
 
     params_dict = asdict(params)
 
     n_samples = sim_cfg.num_sim
-    X = generate_lhs_samples(n_samples, len(params_dict), params_dict)
-
-    # convert the scaled samples to a DataFrame with appropriate column names
-    df_input = pd.DataFrame(X, columns=params_dict.keys())
+    df_input = build_mixed_input_dataframe(n_samples, params_dict)
 
     # run the simulation for each sample and collect the outputs
-    sim = MonteCarloSimulation(sim_cfg, df_input, csv_data=None, json_data=None)
+    sim = MonteCarloSimulation(sim_cfg, df_input, parquet_data=None, json_data=None)
 
     sim.run()
 
