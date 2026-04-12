@@ -24,8 +24,6 @@ params = Params(
     psi=[0.003, 0.007],
     const_v=[4.0, 5.0],
     pacing_strat=["constant velocity", "even effort"],
-    # pacing_strat=["constant velocity"],
-    # pacing_strat=["even effort"],
 )
 
 sim_cfg = SimConfig(

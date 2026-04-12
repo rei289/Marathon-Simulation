@@ -225,6 +225,10 @@ class MonteCarloSimulation:
             # determine finish time
             self.finish_time[just_finished] = self.time_elapsed[step]
 
+            # we also want to stop any simulation where velocity has dropped to zero and energy is depleted
+            just_stopped = self.active & (self.velocity[step] <= 1e-8) & (self.energy[step] <= 1e-8)
+            self.active[just_stopped] = False
+
             if not self.active.any():
                 break                            # all sims done → early exit
 
