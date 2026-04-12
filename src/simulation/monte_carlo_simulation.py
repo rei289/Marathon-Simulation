@@ -22,8 +22,8 @@ import numpy as np
 import pandas as pd
 from google.cloud import storage
 
-from src.simulation.data_classes import Params, SimConfig
-from src.simulation.pacing_strategy import ConstantPaceStrategy, EvenEffortStrategy, PacingContext
+from src.simulation.data_classes import PacingContext, Params, SimConfig
+from src.simulation.pacing_strategy import PacingStrategy
 from src.utilis.helper import get_constant_params
 
 
@@ -55,9 +55,8 @@ class MonteCarloSimulation:
         self.solar_radiation = self.weather_info["solarradiation"]
 
         self.cfg = cfg
-        self.strat = ConstantPaceStrategy(cfg) if cfg.pacing == "constant velocity" else \
-                        EvenEffortStrategy(cfg) if cfg.pacing == "even effort" else None
-        print(f"Running Monte Carlo Simulation with strategy: {self.strat.pace_type} and {self.num_sim} simulations.")
+        self.strat = PacingStrategy(cfg)
+        print(f"Running Monte Carlo Simulation with {self.num_sim} simulations.")
 
         self.g = get_constant_params("gravity")  # gravitational acceleration (m/s^2)
 
@@ -89,7 +88,6 @@ class MonteCarloSimulation:
 
         self.active = np.ones(self.num_sim, dtype=bool)   # True = still running
 
-        self.const_v = cfg.const_v if cfg.const_v is not None else self._constant_velocity()
         self.iteration = 0
 
     def _constant_velocity(self) -> np.ndarray:
@@ -140,14 +138,12 @@ class MonteCarloSimulation:
 
         return 0.7*temp_w + 0.2*temp_g + 0.1*self.temp_d  # weighted average to get a single WBGT value
 
-    def math_model(self, v_target: np.ndarray, theta:np.ndarray, headwind:np.ndarray) -> None:
+    def math_model(self, f_desired: np.ndarray, theta:np.ndarray, headwind:np.ndarray) -> None:
         """Use to provide the equation logic for the simulation, incorporating the effects of terrain and weather on the runner's performance."""
         # calculate all the resistive forces
         f_resistance = self.g*np.sin(theta) \
         + (0.5*self.rho_values*self.drag_coefficient_values*self.frontal_area_values*(self.velocity[self.iteration] + headwind)**2)/self.mass_values
 
-        # calculate amount of force we would like to apply to reach the target velocity, not accounting for resistive forces
-        f_desired = (v_target - self.velocity[self.iteration])/self.dt
         # calculate the actual force applied by the runner, which is limited by the maximum thrust
         f_desired = np.minimum(self.f_max_values, f_desired)
 
@@ -178,21 +174,43 @@ class MonteCarloSimulation:
         self.headwind_profile[self.iteration] = headwind[0]
 
         # now we calculate the new velocity and energy based on controller logic which determines the target velocity
-        v_target = self.strat.get_target_velocity(ctx=PacingContext(
-            dt=self.dt,
-            velocity=self.velocity[self.iteration],
-            energy=self.energy[self.iteration],
-            theta=theta,
-            headwind=headwind,
-            tau=self.tau_values,
-            mass=self.mass_values,
-            rho=self.rho_values,
-            drag_coefficient=self.drag_coefficient_values,
-            frontal_area=self.frontal_area_values,
-            f_max=self.f_max_values,
-            g=self.g,
-        ))
-        self.math_model(v_target, theta, headwind)
+        # determine the target velocity based on the pacing strategy and current conditions
+        m1 = self.pacing_strat_values == "constant velocity"
+        m2 = self.pacing_strat_values == "even effort"
+
+        v_target = np.zeros(self.num_sim)
+        if m1.any():
+            v_target[m1] = self.strat.constant_pace(ctx=PacingContext(
+                const_v=self.const_v_values[m1],
+                velocity=self.velocity[self.iteration][m1],
+                energy=self.energy[self.iteration][m1],
+                theta=theta[m1],
+                headwind=headwind[m1],
+                tau=self.tau_values[m1],
+                mass=self.mass_values[m1],
+                rho=self.rho_values[m1],
+                drag_coefficient=self.drag_coefficient_values[m1],
+                frontal_area=self.frontal_area_values[m1],
+                f_max=self.f_max_values[m1],
+            ))
+
+        # calculate the desired force
+        f_desired = (v_target - self.velocity[self.iteration])/self.dt
+        if m2.any():
+            f_desired[m2] = self.strat.even_effort_pace(ctx=PacingContext(
+                const_v=self.const_v_values[m2],
+                velocity=self.velocity[self.iteration][m2],
+                energy=self.energy[self.iteration][m2],
+                theta=theta[m2],
+                headwind=headwind[m2],
+                tau=self.tau_values[m2],
+                mass=self.mass_values[m2],
+                rho=self.rho_values[m2],
+                drag_coefficient=self.drag_coefficient_values[m2],
+                frontal_area=self.frontal_area_values[m2],
+                f_max=self.f_max_values[m2],
+            ))
+        self.math_model(f_desired, theta, headwind)
 
     def run(self) -> None:
         """Use to run the simulation until the target distance is reached."""
@@ -206,6 +224,10 @@ class MonteCarloSimulation:
 
             # determine finish time
             self.finish_time[just_finished] = self.time_elapsed[step]
+
+            # we also want to stop any simulation where velocity has dropped to zero and energy is depleted
+            just_stopped = self.active & (self.velocity[step] <= 1e-8) & (self.energy[step] <= 1e-8)
+            self.active[just_stopped] = False
 
             if not self.active.any():
                 break                            # all sims done → early exit
@@ -330,6 +352,9 @@ def create_dataframes(params: Params, num_sample: int, seed: int=42) -> pd.DataF
     df = pd.DataFrame()
     rng = np.random.default_rng(seed)
     for param, bounds in asdict(params).items():
+        if param == "pacing_strat":
+            df[param] = rng.choice(bounds, size=num_sample)
+            continue
         # if the bounds is a single value, fill the column with that value, if it's a range, sample from a uniform distribution within that range
         if len(bounds) == bounds_length_single:
             df[param] = np.full(num_sample, bounds[0])

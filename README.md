@@ -1,5 +1,5 @@
 # StrideSim
-StrideSim is a project that simulates runner's running patterns and provides insights into their performance. The project is built using Python and utilizes various libraries for data analysis and visualization. It utilizes GCP for data storage and processing, and is designed to be scalable and efficient. The project includes features such as data preprocessing, model training, and performance evaluation. It also provides a user-friendly interface for visualizing the results and gaining insights into the runner's performance.
+StrideSim is a project that simulates runner's running patterns and provides insights into their performance. It takes in past user running data and simulates how the runner would perform under different conditions, such as varying pacing strategies, terrain, weather conditions, and more. The goal of StrideSim is to help runners understand their performance better and make informed decisions about their training and racing strategies.
 
 ## Setup
 To set up the environment, run the following command in your terminal:

@@ -23,6 +23,8 @@ params = Params(
     convection=[10.0],
     alpha=[0.6, 0.8],
     psi=[0.003, 0.007],
+    const_v=[3.0, 5.0],
+    pacing_strat=["constant velocity", "even effort"],
 )
 
 sim_cfg = SimConfig(
@@ -30,17 +32,15 @@ sim_cfg = SimConfig(
     num_sim=100,
     dt=0.1,
     max_steps=20000,
-    const_v=5.0,
-    pacing="constant velocity",
 )
 
 if __name__ == "__main__":
     # @fix make this more flexible by allowing the user to specify the date of the run to use for fitting the model parameters
     df_input = create_dataframes(params, sim_cfg.num_sim)
-    csv_data=None
+    parquet_data=None
     json_data=None
 
-    sim = MonteCarloSimulation(sim_cfg, df_input=df_input, csv_data=csv_data, json_data=json_data)
+    sim = MonteCarloSimulation(sim_cfg, df_input=df_input, parquet_data=parquet_data, json_data=json_data)
 
     # perform the simulation
     sim.run()

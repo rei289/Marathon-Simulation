@@ -14,9 +14,6 @@ class SimConfig:
     dt: float
     max_steps: int
 
-    # pacing strategy parameters
-    pacing: str|None = None             # pacing strategy type (e.g., "constant", "even effort")
-    const_v: float|None = None          # constant velocity for "constant" pacing strategy (m/s)
 
 @dataclass
 class Params:
@@ -38,11 +35,14 @@ class Params:
     alpha: list[float]                  # absorption coefficient for solar radiation (dimensionless)
     psi: list[float]                    # weighting factor for the drop in aerobic power per temperature (dimensionless)
 
+    pacing_strat: list[str]          # pacing strategy type (e.g., "constant", "even effort")
+    const_v: list[float]                # constant velocity for "constant" pacing strategy (m/s)
+
 @dataclass
 class PacingContext:
     """Context class to hold the current state of the simulation for use in pacing strategies."""
 
-    dt: float
+    const_v: np.ndarray
     velocity: np.ndarray
     energy: np.ndarray
     theta: np.ndarray
@@ -53,4 +53,3 @@ class PacingContext:
     drag_coefficient: np.ndarray
     frontal_area: np.ndarray
     f_max: np.ndarray
-    g: float
