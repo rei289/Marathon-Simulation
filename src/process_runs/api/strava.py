@@ -4,6 +4,7 @@ This module provides a class-based approach to retrieve and save running data fr
 It organizes the functionality into logical components for better maintainability and reusability.
 """
 
+import logging
 import os
 from typing import Any
 
@@ -14,8 +15,9 @@ from dotenv import load_dotenv, set_key
 class StravaDataRetriever:
     """A class to handle Strava API authentication and data retrieval."""
 
-    def __init__(self) -> None:
+    def __init__(self, logger: logging.Logger) -> None:
         """Initialize the Strava data retriever. Load credentials and set up API endpoints."""
+        self.logger = logger
         self._load_credentials()
         self.token_url = "https://www.strava.com/oauth/token" # noqa: S105
         self.api_base = "https://www.strava.com/api/v3"
@@ -30,12 +32,14 @@ class StravaDataRetriever:
 
         if not self.client_id or not self.client_secret:
             message = "STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET must be set in environment variables. Please create a .env file with these values."
+            self.logger.error(message)
             raise ValueError(message)
 
     def refresh_access_token(self) -> None:
         """Use to refresh the Strava access token using the refresh token."""
         if not self.refresh_token:
             message = "Missing STRAVA_REFRESH_TOKEN in .env. Please create a .env file with this value."
+            self.logger.error(message)
             raise ValueError(message)
 
         payload = {
@@ -56,6 +60,7 @@ class StravaDataRetriever:
         # strava may rotate refresh_token; persist latest value
         new_refresh = token_data.get("refresh_token")
         if new_refresh and new_refresh != self.refresh_token:
+            self.logger.info("Strava refresh token has been rotated. Updating .env with new refresh token.")
             self.refresh_token = new_refresh
             set_key(".env", "STRAVA_REFRESH_TOKEN", new_refresh)
 
@@ -102,7 +107,7 @@ class StravaDataRetriever:
 
         """
         runs = [act for act in activities if act.get("type") == "Run"][:limit]
-        print(f"📊 Found {len(runs)} recent runs")
+        self.logger.info(f"Found {len(runs)} recent runs")
         return runs
 
     def _pad_list(self, lst: list[Any], target_length: int) -> list[Any]:
@@ -148,7 +153,7 @@ class StravaDataRetriever:
         # extract stream data with defaults
         time_data = streams.get("time", {}).get("data", [])
         if not time_data:
-            print(f"⚠️ No time stream data for run '{name}' ({run_id}), skipping streams.")
+            self.logger.warning(f"No time stream data for run '{name}' ({run_id}), skipping streams.")
             return False
 
         # extract all stream types

@@ -13,13 +13,11 @@ class StrideSimLogger:
                  execution_env: str,
                  bucket_name: str|None,
                  folder_name: str,
-                 job_id: str,
                  log_file:str="console.log") -> None:
         """Initialize the logger with a name, folder, and log file name."""
         self.execution_env = execution_env
         self.name = "StrideSim"
         self.folder_name = folder_name
-        self.job_id = job_id
         self.log_file = log_file
 
         # Use /tmp on GCP containers because it is writable.
@@ -28,7 +26,7 @@ class StrideSimLogger:
         else:
             self.local_root = bucket_name or "logs"
 
-        self.log_dir = Path(self.local_root) / self.folder_name / self.job_id
+        self.log_dir = Path(self.local_root) / self.folder_name
         self.log_path = self.log_dir / self.log_file
 
     def setup_logger(self) -> logging.Logger:
@@ -84,7 +82,7 @@ class StrideSimLogger:
         blob_path = (
             destination_blob
             if destination_blob is not None
-            else f"{self.folder_name}/{self.job_id}/{self.log_file}"
+            else f"{self.folder_name}/{self.log_file}"
         )
 
         client = storage.Client()

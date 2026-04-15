@@ -1,7 +1,5 @@
 """Test script to deploy directly in GCP."""
 import os
-import uuid
-from datetime import datetime, timezone
 
 import numpy as np
 from dotenv import load_dotenv
@@ -11,19 +9,8 @@ from src.simulation.monte_carlo_simulation import (
     MonteCarloSimulation,
     create_dataframes,
 )
+from src.utilis.helper import job_id, time_now
 from src.utilis.logger import StrideSimLogger
-
-
-def job_id(timestamp: str|None=None) -> str:
-    """Generate a unique job ID based on the current timestamp."""
-    if timestamp is None:
-        timestamp = time_now()
-    return f"{timestamp}_{uuid.uuid4().hex[:8]}"
-
-def time_now() -> str:
-    """Generate a unique timestamp."""
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-
 
 params = Params(
     f_max=[9.0, 12.0],
@@ -64,14 +51,14 @@ if __name__ == "__main__":
         load_dotenv()
         bucket_name = os.getenv("BUCKET_NAME", "local_results")
 
-        logger_mgr = StrideSimLogger(execution_env=execution_env, bucket_name=bucket_name, folder_name=folder_name, job_id=jid)
+        logger_mgr = StrideSimLogger(execution_env=execution_env, bucket_name=bucket_name, folder_name=f"{folder_name}/{jid}")
         logger = logger_mgr.setup_logger()
         logger.info("Running in local environment")
     elif execution_env == "gcp":
         # get bucket name from environment variable
         bucket_name = os.getenv("BUCKET_NAME")
 
-        logger_mgr = StrideSimLogger(execution_env=execution_env, bucket_name=bucket_name, folder_name=folder_name, job_id=jid)
+        logger_mgr = StrideSimLogger(execution_env=execution_env, bucket_name=bucket_name, folder_name=f"{folder_name}/{jid}")
         logger = logger_mgr.setup_logger()
         if not bucket_name:
             error = "The BUCKET_NAME environment variable is not set!"
@@ -80,7 +67,7 @@ if __name__ == "__main__":
 
         logger.info("Running in GCP environment")
     else:
-        logger_mgr = StrideSimLogger(execution_env=execution_env, bucket_name=None, folder_name=folder_name, job_id=jid)
+        logger_mgr = StrideSimLogger(execution_env=execution_env, bucket_name=None, folder_name=f"{folder_name}/{jid}")
         logger = logger_mgr.setup_logger()
         warn_message = f"Running in unknown environment: {execution_env}. Results will not be saved."
         logger.warning(warn_message)

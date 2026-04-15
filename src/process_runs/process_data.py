@@ -1,5 +1,6 @@
 """File contains class for preprocessing data for marathon simulations."""
 import json
+import logging
 import math
 from pathlib import Path
 
@@ -10,8 +11,9 @@ import pandas as pd
 class DataProcessor:
     """Class for processing data from Strava and Visual Crossing to prepare it for use in the marathon simulation."""
 
-    def __init__(self, parquet_data: dict, json_data: dict) -> None:
+    def __init__(self, logger: logging.Logger, parquet_data: dict, json_data: dict) -> None:
         """Initialize the DataProcessor with raw CSV and JSON data."""
+        self.logger = logger
         # we first convert dictionary to pandas DataFrame
         self.parquet_data = pd.DataFrame(parquet_data)
         self.json_data = json_data
@@ -167,11 +169,11 @@ class DataProcessor:
         folder_path = Path(folder)
         file_path = folder_path / filename
         self.parquet_data.to_parquet(file_path, index=False)
-        print(f"✅ Saved streams to {filename}")
+        self.logger.info(f"Saved streams to {filename} at {file_path}")
 
     def save_to_json(self, folder: str, filename: str) -> None:
         """Use to save processed data to a JSON file."""
         folder_path = Path(folder)
         file_path = folder_path / filename
         file_path.write_text(json.dumps(self.json_data, indent=4))
-        print(f"✅ Saved overall data to {filename}")
+        self.logger.info(f"Saved overall data to {filename} at {file_path}")

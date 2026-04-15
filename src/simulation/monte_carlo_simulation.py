@@ -242,6 +242,7 @@ class MonteCarloSimulation:
         """Use to save the results metadata, and configuration of the simulation."""
         # create a unique job id and base path for storing results in the bucket
         base_path = f"{simulation_folder}/{job_id}"
+        self.logger.info(f"Saving results to cloud storage at: {bucket_name}/{base_path}")
 
         client = storage.Client()
         bucket = client.bucket(bucket_name)
@@ -297,6 +298,7 @@ class MonteCarloSimulation:
         """Use to save the results metadata, and configuration of the simulation."""
         # create a unique job id and base path for storing results in the bucket
         base_path = f"{bucket_name}/{simulation_folder}/{job_id}"
+        self.logger.info(f"Saving results to local storage at: {base_path}")
 
         # create output folder if it doesn't exist
         output_folder_path = Path(base_path)
