@@ -15,9 +15,10 @@ from dotenv import load_dotenv, set_key
 class StravaDataRetriever:
     """A class to handle Strava API authentication and data retrieval."""
 
-    def __init__(self, logger: logging.Logger) -> None:
+    def __init__(self, logger: logging.Logger, execution_env: str) -> None:
         """Initialize the Strava data retriever. Load credentials and set up API endpoints."""
         self.logger = logger
+        self.execution_env = execution_env
         self._load_credentials()
         self.token_url = "https://www.strava.com/oauth/token" # noqa: S105
         self.api_base = "https://www.strava.com/api/v3"
@@ -60,9 +61,12 @@ class StravaDataRetriever:
         # strava may rotate refresh_token; persist latest value
         new_refresh = token_data.get("refresh_token")
         if new_refresh and new_refresh != self.refresh_token:
-            self.logger.info("Strava refresh token has been rotated. Updating .env with new refresh token.")
-            self.refresh_token = new_refresh
-            set_key(".env", "STRAVA_REFRESH_TOKEN", new_refresh)
+            if self.logger.execution_env == "gcp":
+                self.logger.warning("Strava refresh token has been rotated. Please update the STRAVA_REFRESH_TOKEN secret in GCP Secret Manager.")
+            elif self.logger.execution_env == "local":
+                self.logger.info("Strava refresh token has been rotated. Updating .env with new refresh token.")
+                self.refresh_token = new_refresh
+                set_key(".env", "STRAVA_REFRESH_TOKEN", new_refresh)
 
     def _auth_headers(self) -> dict[str, str]:
         """Use to generate authorization headers for Strava API requests."""
@@ -107,7 +111,7 @@ class StravaDataRetriever:
 
         """
         runs = [act for act in activities if act.get("type") == "Run"][:limit]
-        self.logger.info(f"Found {len(runs)} recent runs")
+        self.logger.info(f"Processing {len(runs)} recent runs")
         return runs
 
     def _pad_list(self, lst: list[Any], target_length: int) -> list[Any]:

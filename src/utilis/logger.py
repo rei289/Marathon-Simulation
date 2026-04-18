@@ -19,6 +19,7 @@ class StrideSimLogger:
         self.name = "StrideSim"
         self.folder_name = folder_name
         self.log_file = log_file
+        self.bucket_name = bucket_name
 
         # Use /tmp on GCP containers because it is writable.
         if execution_env == "gcp":

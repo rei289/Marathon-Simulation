@@ -27,10 +27,6 @@ if __name__ == "__main__":
         logger = logger_mgr.setup_logger()
         logger.info("Running in local environment")
         # save results to local file system
-        # Run the main function
-        retrieve_run(logger, num_runs, bucket_name, runs_folder=folder_name)
-        logger.info("Data retrieval completed successfully.")
-        logger_mgr.close_logger(logger)
     elif execution_env == "gcp":
         # get bucket name from environment variable
         num_runs = int(os.getenv("NUM_RUNS", "1"))
@@ -44,3 +40,21 @@ if __name__ == "__main__":
         logger = logger_mgr.setup_logger()
         warn_message = f"Running in unknown environment: {execution_env}. Results will not be saved."
         logger.warning(warn_message)
+        logger_mgr.close_logger(logger)
+
+    try:
+        logger.info("Starting run data retrieval...")
+        retrieve_run(logger, logger_mgr, num_runs)
+        logger.info("Run data retrieval completed successfully.")
+
+        # if execution is done in gcp, we want to move the logs from the /tmp folder to the bucket for easier access
+        if execution_env == "gcp":
+            logger.info("Moving logs from local /tmp folder to GCP bucket for easier access...")
+            log_blob_path = logger_mgr.upload_log_to_gcs(bucket_name)
+            logger.info(f"Logs uploaded to GCP at: {log_blob_path}")
+
+    except Exception as e:
+        error = f"An error occurred during run data retrieval: {e}"
+        logger.exception(error)
+    finally:
+        logger_mgr.close_logger(logger)

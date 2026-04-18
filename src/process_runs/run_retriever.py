@@ -1,21 +1,18 @@
 """Main file for retrieving Strava and Visual Crossing data for marathon simulations."""
 import logging
-from pathlib import Path
 
 from dateutil import parser
 
 from src.process_runs.api.strava import StravaDataRetriever
 from src.process_runs.api.visual_crossing import VisualCrossingDataRetriever
 from src.process_runs.process_data import DataProcessor
+from src.utilis.logger import StrideSimLogger
 
 
-def retrieve_run(logger: logging.Logger, num_runs: int, bucket_name: str, runs_folder: str = "01_runs") -> None:
+def retrieve_run(logger: logging.Logger, logger_mgr: StrideSimLogger, num_runs: int) -> None:
     """Use to retrieve data from Strava and Visual Crossing."""
-    # ensure the output folder exists
-    output_folder_path = Path(f"{bucket_name}/{runs_folder}")
-    if not output_folder_path.exists():
-        logger.info(f"Creating output folder at: {output_folder_path}")
-        output_folder_path.mkdir(exist_ok=True, parents=True)
+    # define runs folder name from logger manager
+    runs_folder = logger_mgr.folder_name.split("/")[0]
 
     # initialize data retrievers
     strava_retriever = StravaDataRetriever(logger)
@@ -28,22 +25,13 @@ def retrieve_run(logger: logging.Logger, num_runs: int, bucket_name: str, runs_f
     # filter runs
     runs = strava_retriever.filter_runs(activities, limit=num_runs)
 
-    # setup output folder
-    logger.info(f"Saving data to folder: {bucket_name}/{runs_folder}")
-
     # process each run
     for i, run in enumerate(runs, 1):
-        logger.info(f"\nProcessing run {i}/{len(runs)}")
+        logger.info(f"------------- Processing run {i}/{len(runs)} -------------")
 
         # get the start date and format it
         start_date = run.get("start_date_local", "")
         date_str = parser.isoparse(start_date).strftime("%Y-%m-%d_%H-%M")
-        # create a folder under output_folder for each run
-        run_folder = f"{date_str}"
-        run_folder_path = output_folder_path / run_folder
-        run_folder_path.mkdir(exist_ok=True)
-
-        logger.info(f"Created folder for run: {run_folder_path}")
 
         # check this run data to make sure all its componets are present
         # parquet file data
@@ -60,12 +48,10 @@ def retrieve_run(logger: logging.Logger, num_runs: int, bucket_name: str, runs_f
         # clean and perform feature engineering
         data_processor.process()
 
-        # Save to JSON
-        json_filename = "overall.json"
-        data_processor.save_to_json(run_folder_path, json_filename)
-
-        # Save to parquet
-        parquet_filename = "streams.parquet"
-        data_processor.save_to_parquet(run_folder_path, parquet_filename)
+        # save the processed data to the output folder
+        if logger_mgr.execution_env == "local":
+            data_processor.save_to_local_results(logger_mgr.bucket_name, runs_folder, date_str, "streams.parquet", "overall.json")
+        elif logger_mgr.execution_env == "gcp":
+            data_processor.save_to_cloud_results(logger_mgr.bucket_name, runs_folder, date_str, "streams.parquet", "overall.json")
 
     logger.info("\nDone saving all running data!")

@@ -109,7 +109,7 @@ if __name__ == "__main__":
     except Exception as e:
         error = f"An error occurred during the simulation: {e}"
         logger.exception(error)
-        logger.info("Simulation run failed")
+        logger.exception("Simulation run failed")
     finally:
         logger.info("Closing logger")
         logger_mgr.close_logger(logger)
