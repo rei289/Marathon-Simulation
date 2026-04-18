@@ -186,7 +186,7 @@ def model_fitting(date: str, bucket_name: str, train_folder: str = "02_trainings
 
     # put this in a json file
     data = study.best_params
-    data["error"] = study.best_value
+    data["mse"] = study.best_value
 
     # now determine cutoff frequency for the noise generation
     df_sim = fitter.run_simulation(params = data)

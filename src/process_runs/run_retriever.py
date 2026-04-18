@@ -43,6 +43,9 @@ def retrieve_run(logger: logging.Logger, logger_mgr: StrideSimLogger, num_runs: 
         # now we want to retrieve the weather data for this run
         json_data["weather"] = visual_crossing_retriever.get_weather_openweather(json_data)
 
+        # lastly add the job id to the json data for easier reference later on
+        json_data["jid"] = logger_mgr.folder_name.split("/")[2]
+
         # CLEAN UP DATA AND PERFORM FEATURE ENGINEERING HERE
         data_processor = DataProcessor(logger, parquet_data, json_data)
         # clean and perform feature engineering
