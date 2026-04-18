@@ -15,8 +15,8 @@ def retrieve_run(logger: logging.Logger, logger_mgr: StrideSimLogger, num_runs: 
     runs_folder = logger_mgr.folder_name.split("/")[0]
 
     # initialize data retrievers
-    strava_retriever = StravaDataRetriever(logger)
-    visual_crossing_retriever = VisualCrossingDataRetriever(logger)
+    strava_retriever = StravaDataRetriever(logger, logger_mgr.execution_env)
+    visual_crossing_retriever = VisualCrossingDataRetriever(logger, logger_mgr.execution_env)
 
     # now we want to retrieve the data from the past # runs specified by the user
     # fetch activities

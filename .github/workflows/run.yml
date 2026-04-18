@@ -5,7 +5,7 @@ on:
     inputs:
         num_runs:
           description: 'Number of runs to execute'
-          required: false
+          required: true
           default: 1
           type: integer
 
