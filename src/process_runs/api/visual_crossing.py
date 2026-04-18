@@ -3,6 +3,7 @@
 This module provides a class-based approach to retrieve and save weather data from Visual Crossing API.
 It organizes the functionality into logical components for better maintainability and reusability.
 """
+import logging
 import os
 from datetime import datetime
 from typing import Any
@@ -14,8 +15,9 @@ from dotenv import load_dotenv
 class VisualCrossingDataRetriever:
     """Class to retrieve weather data from Visual Crossing API."""
 
-    def __init__(self, output_folder: str = "data") -> None:
+    def __init__(self, logger: logging.Logger, output_folder: str = "data") -> None:
         """Initialize the data retriever and load environment variables."""
+        self.logger = logger
         self.output_folder = output_folder
         self._load_credentials()
 
@@ -26,6 +28,7 @@ class VisualCrossingDataRetriever:
 
         if not self.api_key:
             error_message = "VISUAL_CROSSING_API_KEY must be set in environment variables. Please create a .env file with this value."
+            self.logger.error(error_message)
             raise ValueError(error_message)
 
     def get_weather_openweather(self, json_data: dict[str, Any]) -> dict[str, Any]:
@@ -52,5 +55,5 @@ class VisualCrossingDataRetriever:
             # find the hour in the weather data
             return data["days"][0]["hours"][int(local_dt.strftime("%H"))]
         else: # noqa: RET505
-            print(f"Error retrieving weather data: {response.status_code}")
+            self.logger.error(f"Error retrieving weather data: {response.status_code}")
             return {}

@@ -1,17 +1,21 @@
 """File contains class for preprocessing data for marathon simulations."""
 import json
+import logging
 import math
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from google.cloud import storage
 
 
 class DataProcessor:
     """Class for processing data from Strava and Visual Crossing to prepare it for use in the marathon simulation."""
 
-    def __init__(self, parquet_data: dict, json_data: dict) -> None:
+    def __init__(self, logger: logging.Logger, parquet_data: dict, json_data: dict) -> None:
         """Initialize the DataProcessor with raw CSV and JSON data."""
+        self.logger = logger
         # we first convert dictionary to pandas DataFrame
         self.parquet_data = pd.DataFrame(parquet_data)
         self.json_data = json_data
@@ -162,16 +166,44 @@ class DataProcessor:
             "crosswind_mps",
         ])
 
-    def save_to_parquet(self, folder: str, filename: str) -> None:
-        """Use to save processed data to a Parquet file."""
-        folder_path = Path(folder)
-        file_path = folder_path / filename
-        self.parquet_data.to_parquet(file_path, index=False)
-        print(f"✅ Saved streams to {filename}")
+    def save_to_local_results(self, bucket_name: str, run_folder: str, date_str: str, parquet_filename: str, json_filename: str) -> None:
+        """Use to save processed data to local results folder."""
+        # ensure the output folder exists
+        folder_path = Path(bucket_name) / run_folder / date_str
+        if not folder_path.exists():
+            self.logger.info(f"Creating output folder at: {folder_path}")
+            folder_path.mkdir(exist_ok=True, parents=True)
 
-    def save_to_json(self, folder: str, filename: str) -> None:
-        """Use to save processed data to a JSON file."""
-        folder_path = Path(folder)
-        file_path = folder_path / filename
-        file_path.write_text(json.dumps(self.json_data, indent=4))
-        print(f"✅ Saved overall data to {filename}")
+        self.logger.info(f"Saving results to local folder: {folder_path}")
+
+        # save parquet data
+        parquet_file_path = folder_path / parquet_filename
+        self.parquet_data.to_parquet(parquet_file_path, index=False)
+        self.logger.info(f"Saved streams to {parquet_filename} at {parquet_file_path}")
+
+        # save json data
+        json_file_path = folder_path / json_filename
+        json_file_path.write_text(json.dumps(self.json_data, indent=4))
+        self.logger.info(f"Saved overall data to {json_filename} at {json_file_path}")
+
+    def save_to_cloud_results(self, bucket_name: str, run_folder: str, date_str: str, parquet_filename: str, json_filename: str) -> None:
+        """Use to save processed data to cloud results folder."""
+        # create a unique job id and base path for storing results in the bucket
+        base_path = f"{run_folder}/{date_str}"
+        self.logger.info(f"Saving results to cloud storage at: {bucket_name}/{base_path}")
+
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        buffer_results = BytesIO()
+
+        # save parquet data
+        self.parquet_data.to_parquet(buffer_results, index=False)
+        buffer_results.seek(0)
+        streams_blob = bucket.blob(f"{base_path}/{parquet_filename}")
+        streams_blob.upload_from_file(buffer_results, content_type="application/octet-stream")
+        self.logger.info(f"Saved parquet to GCP bucket: {bucket_name} in folder: {base_path}")
+
+        # save json data
+        json_blob = bucket.blob(f"{base_path}/{json_filename}")
+        json_blob.upload_from_string(json.dumps(self.json_data, indent=4), content_type="application/json")
+        self.logger.info(f"Saved json to GCP bucket: {bucket_name} in folder: {base_path}")

@@ -12,10 +12,9 @@ In addition to the Kellner model, this simulation incorporates:
 """
 
 import json
-import uuid
 from dataclasses import asdict
-from datetime import datetime, timezone
 from io import BytesIO
+from logging import Logger
 from pathlib import Path
 
 import numpy as np
@@ -30,8 +29,9 @@ from src.utilis.helper import get_constant_params
 class MonteCarloSimulation:
     """Class to run a Monte Carlo simulation of the marathon model with varying parameters and conditions."""
 
-    def __init__(self, cfg: SimConfig, df_input: pd.DataFrame, parquet_data: str|None, json_data: str|None) -> None:
+    def __init__(self, logger: Logger, cfg: SimConfig, df_input: pd.DataFrame, parquet_data: str|None, json_data: str|None) -> None:
         """Use to initialize the simulation with the given configuration, input parameters, and optional course and weather data."""
+        self.logger = logger
         self.target_dist = cfg.target_dist
         self.num_sim = cfg.num_sim
         self.dt = cfg.dt
@@ -56,7 +56,7 @@ class MonteCarloSimulation:
 
         self.cfg = cfg
         self.strat = PacingStrategy(cfg)
-        print(f"Running Monte Carlo Simulation with {self.num_sim} simulations.")
+        self.logger.info(f"Running Monte Carlo Simulation with {self.num_sim} simulations.")
 
         self.g = get_constant_params("gravity")  # gravitational acceleration (m/s^2)
 
@@ -238,12 +238,11 @@ class MonteCarloSimulation:
 
             self.iteration = step + 1
 
-    def save_to_cloud_results(self, bucket_name: str, simulation_folder: str) -> None:
+    def save_to_cloud_results(self, bucket_name: str, simulation_folder: str, job_id: str, ts: str) -> None:
         """Use to save the results metadata, and configuration of the simulation."""
         # create a unique job id and base path for storing results in the bucket
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        job_id = f"{ts}_{uuid.uuid4().hex[:8]}"
         base_path = f"{simulation_folder}/{job_id}"
+        self.logger.info(f"Saving results to cloud storage at: {bucket_name}/{base_path}")
 
         client = storage.Client()
         bucket = client.bucket(bucket_name)
@@ -295,12 +294,11 @@ class MonteCarloSimulation:
             content_type="application/json",
         )
 
-    def save_to_local_results(self, bucket_name: str, simulation_folder: str) -> None:
+    def save_to_local_results(self, bucket_name: str, simulation_folder: str, job_id: str, ts: str) -> None:
         """Use to save the results metadata, and configuration of the simulation."""
         # create a unique job id and base path for storing results in the bucket
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        job_id = f"{ts}_{uuid.uuid4().hex[:8]}"
         base_path = f"{bucket_name}/{simulation_folder}/{job_id}"
+        self.logger.info(f"Saving results to local storage at: {base_path}")
 
         # create output folder if it doesn't exist
         output_folder_path = Path(base_path)

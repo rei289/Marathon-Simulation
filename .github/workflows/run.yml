@@ -1,7 +1,13 @@
-name: Deploy Simulation on Cloud
+name: Deploy Run Retriever on Cloud
 
 on:
   workflow_dispatch:
+    inputs:
+        num_runs:
+          description: 'Number of runs to execute'
+          required: false
+          default: 1
+          type: integer
 
 jobs:
   deploy:
@@ -30,21 +36,22 @@ jobs:
       # We tag it with the 'latest' label to keep things simple
       - name: Build and Push Container
         run: |
-          DOCKER_TAG="us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/stridesim-simulations:latest"
-          docker build -f Simulations.Dockerfile -t $DOCKER_TAG .
+          DOCKER_TAG="us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/stridesim-runs:latest"
+          docker build -f Runs.Dockerfile -t $DOCKER_TAG .
           docker push $DOCKER_TAG
 
       # 4. Deploy to Cloud Run Job using the IMAGE
       - name: 'Deploy to Cloud Run Job'
         uses: 'google-github-actions/deploy-cloudrun@v2'
         with:
-          job: 'stridesim-simulations'
+          job: 'stridesim-runs'
           region: 'us-central1'
           project_id: '${{ secrets.GCP_PROJECT_ID }}'
-          image: 'us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/stridesim-simulations:latest'
+          image: 'us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/stridesim-runs:latest'
           env_vars: |
             BUCKET_NAME=${{ vars.GCP_BUCKET_NAME }}
             EXECUTION_ENV=gcp
+            NUM_RUNS=${{ inputs.num_runs }}
           flags: '--execute-now'
 
       # 5. Cleanup "Untagged" Images (The $0.00 bill insurance)
@@ -52,5 +59,5 @@ jobs:
       - name: Cleanup Registry
         run: |
           gcloud artifacts docker images delete \
-          us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/stridesim-simulations \
+          us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/stridesim-runs \
           --delete-tags --quiet --filter="NOT tags:latest" || true
