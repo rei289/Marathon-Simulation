@@ -52,7 +52,9 @@ jobs:
             BUCKET_NAME=${{ vars.GCP_BUCKET_NAME }}
             EXECUTION_ENV=gcp
             NUM_RUNS=${{ inputs.num_runs }}
-          flags: '--execute-now'
+          flags: >- 
+            --execute-now
+            --set-secrets=STRAVA_CLIENT_ID=STRAVA_CLIENT_ID:latest,STRAVA_CLIENT_SECRET=STRAVA_CLIENT_SECRET:latest,STRAVA_REFRESH_TOKEN=STRAVA_REFRESH_TOKEN:latest,VISUAL_CROSSING_API_KEY=VISUAL_CROSSING_API_KEY:latest
 
       # 5. Cleanup "Untagged" Images (The $0.00 bill insurance)
       # This deletes the hidden 'old versions' that Google stores behind the scenes

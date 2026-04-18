@@ -46,15 +46,13 @@ if __name__ == "__main__":
         logger.info("Starting run data retrieval...")
         retrieve_run(logger, logger_mgr, num_runs)
         logger.info("Run data retrieval completed successfully.")
-
+    except Exception as e:
+        error = f"An error occurred during run data retrieval: {e}"
+        logger.exception(error)
+    finally:
         # if execution is done in gcp, we want to move the logs from the /tmp folder to the bucket for easier access
         if execution_env == "gcp":
             logger.info("Moving logs from local /tmp folder to GCP bucket for easier access...")
             log_blob_path = logger_mgr.upload_log_to_gcs(bucket_name)
             logger.info(f"Logs uploaded to GCP at: {log_blob_path}")
-
-    except Exception as e:
-        error = f"An error occurred during run data retrieval: {e}"
-        logger.exception(error)
-    finally:
         logger_mgr.close_logger(logger)
