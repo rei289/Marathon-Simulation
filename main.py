@@ -31,9 +31,12 @@ def main() -> None:
 
     config = stride_sim_rust.SimulationConfig(
         target_dist=4300,
-        num_sim=10000,
+        num_sim=1000,
         dt=0.1,
         max_steps=20000,
+        result_path="test.parquet",
+        # result_path="running_simulation_data/03_simulations/test.parquet",
+
     )
 
     weather = stride_sim_rust.Weather(

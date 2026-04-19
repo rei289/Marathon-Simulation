@@ -27,6 +27,7 @@ fn main() {
         num_sim: 1_000,
         dt: Time::new::<second>(1.0),
         max_steps: 15_000,
+        result_path: "results.parquet".to_string(),
     };
 
     let runners = (0..config.num_sim)

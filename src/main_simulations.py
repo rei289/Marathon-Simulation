@@ -56,7 +56,7 @@ params = Params(
 
 sim_cfg = SimConfig(
     target_dist=4300,
-    num_sim=10000,
+    num_sim=1000,
     dt=0.1,
     max_steps=20000,
 )
@@ -115,6 +115,7 @@ if __name__ == "__main__":
         end_time = time.perf_counter()
         elapsed_time = end_time - start_time
         logger.info(f"Monte Carlo Simulation completed in {elapsed_time:.2f} seconds.")
+        memory_usage()
 
         logger.info("Monte Carlo Simulation completed successfully.")
 
@@ -143,7 +144,5 @@ if __name__ == "__main__":
     finally:
         logger.info("Closing logger")
         logger_mgr.close_logger(logger)
-        memory_usage()
-
 
 

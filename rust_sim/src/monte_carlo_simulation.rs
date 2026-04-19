@@ -2,7 +2,6 @@
 Script performs a Monte Carlo simulation to determine all possible outcomes of running a marathon.
 */
 
-// use ndarray::Array2;
 use uom::si::f64::*;
 use uom::si::frequency::hertz;
 use uom::si::length::meter;
@@ -18,8 +17,19 @@ use uom::si::heat_transfer::watt_per_square_meter_kelvin;
 use uom::si::thermodynamic_temperature::degree_celsius;
 use uom::si::heat_flux_density::watt_per_square_meter;
 
-use std::cmp;
 use crate::constants::*;
+
+use std::fs::File;
+use std::sync::Arc;
+use std::path::Path;
+use arrow_array::{
+    ArrayRef, BooleanArray, Float64Array, RecordBatch, UInt32Array,
+};
+use arrow_schema::{DataType, Field, Schema};
+use parquet::arrow::ArrowWriter;
+use parquet::file::properties::WriterProperties;
+
+const PARQUET_CHUNK_ROWS: usize = 50_000;
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -34,6 +44,7 @@ pub struct SimulationConfig {
     pub num_sim: usize,
     pub dt: Time,
     pub max_steps: usize,
+    pub result_path: String,                // path to save results (e.g. parquet file)
 }
 
 #[derive(Clone, Debug)]
@@ -85,6 +96,15 @@ pub struct RunnerState {
     distance: Vec<Option<Length>>, // [runner, step]
     time_elapsed: Vec<Option<Time>>, // [runner, step]
     finished_step: Option<usize>, // step at which runner finished, None if not finished
+}
+
+#[derive(Debug, Clone)]
+pub struct ResultRow {
+    pub runner: u32,
+    pub time_s: f64,
+    pub distance_m: f64,
+    pub velocity_mps: f64,
+    pub energy_j_per_kg: f64,
 }
 
 #[derive(Debug)]
@@ -189,6 +209,9 @@ impl MonteCarloSimulation {
         let n = self.input.config.num_sim;
         let tmax = self.input.config.max_steps;
 
+        let mut writer = Self::make_parquet_writer(&self.input.config.result_path)?;
+        let mut row_buffer: Vec<ResultRow> = Vec::with_capacity(PARQUET_CHUNK_ROWS);
+
         for runner in 0..n {
             // first update the sigma values for all runners based on the weather conditions and their individual psi parameters
             let wbgt_c = self.get_wbgt(runner)?.get::<degree_celsius>();
@@ -214,10 +237,25 @@ impl MonteCarloSimulation {
             }
 
             for step in 0..=tmax {
-                if self.state[runner].finished_step.is_some() {
-                    break;
-                }
                 self.step_runner(runner, step)?;
+
+                //TODO: save results at each step to parquet file for later analysis
+                let time_s = self.state[runner].time_elapsed[step].ok_or(SimError::InvalidValue("missing time before save"))?.get::<second>();
+                let distance_m = self.state[runner].distance[step].ok_or(SimError::InvalidValue("missing distance before save"))?.get::<meter>();
+                let velocity_mps = self.state[runner].velocity[step].ok_or(SimError::InvalidValue("missing velocity before save"))?.get::<meter_per_second>();
+                let energy_j_per_kg = self.state[runner].energy[step].ok_or(SimError::InvalidValue("missing energy before save"))?.get::<joule_per_kilogram>();
+
+                row_buffer.push(ResultRow {
+                    runner: runner as u32,
+                    time_s,
+                    distance_m,
+                    velocity_mps,
+                    energy_j_per_kg,
+                });
+
+                if row_buffer.len() >= PARQUET_CHUNK_ROWS {
+                    Self::flush_parquet_rows(&mut writer, &mut row_buffer)?;
+                }
 
                 // check if runner has finished (either from reaching target distance, max steps, or velocity dropping to 0)
                 if self.state[runner].distance[step].ok_or(SimError::InvalidValue("missing distance at step"))? >= self.input.config.target_dist {
@@ -232,6 +270,11 @@ impl MonteCarloSimulation {
                 }
             }
         }
+
+        if !row_buffer.is_empty() {
+            Self::flush_parquet_rows(&mut writer, &mut row_buffer)?;
+        }
+        Self::close_parquet_writer(writer)?;
 
         let mut summaries = Vec::with_capacity(n);
         for runner in 0..n {
@@ -253,6 +296,57 @@ impl MonteCarloSimulation {
             .collect();
 
         Ok(SimulationResult { summaries, time: time_s })
+    }
+    fn parquet_schema() -> Arc<Schema> {
+        Arc::new(Schema::new(vec![
+            Field::new("runner", DataType::UInt32, false),
+            Field::new("time_s", DataType::Float64, false),
+            Field::new("distance_m", DataType::Float64, false),
+            Field::new("velocity_mps", DataType::Float64, false),
+            Field::new("energy_j_per_kg", DataType::Float64, false),
+        ]))
+    }
+
+    fn make_parquet_writer(path: &str) -> Result<ArrowWriter<File>, SimError> {
+        let file = File::create(path)
+            .map_err(|_| SimError::InvalidValue("failed to create parquet file"))?;
+        let props = WriterProperties::builder().build();
+        ArrowWriter::try_new(file, Self::parquet_schema(), Some(props))
+            .map_err(|_| SimError::InvalidValue("failed to create parquet writer"))
+    }
+
+    fn flush_parquet_rows(
+        writer: &mut ArrowWriter<File>,
+        rows: &mut Vec<ResultRow>,
+    ) -> Result<(), SimError> {
+        let runner_array = UInt32Array::from(rows.iter().map(|r| r.runner).collect::<Vec<u32>>());
+        let time_array = Float64Array::from(rows.iter().map(|r| r.time_s).collect::<Vec<f64>>());
+        let distance_array = Float64Array::from(rows.iter().map(|r| r.distance_m).collect::<Vec<f64>>());
+        let velocity_array = Float64Array::from(rows.iter().map(|r| r.velocity_mps).collect::<Vec<f64>>());
+        let energy_array = Float64Array::from(rows.iter().map(|r| r.energy_j_per_kg).collect::<Vec<f64>>());
+
+        let batch = RecordBatch::try_new(
+            Self::parquet_schema(),
+            vec![
+                Arc::new(runner_array) as ArrayRef,
+                Arc::new(time_array) as ArrayRef,
+                Arc::new(distance_array) as ArrayRef,
+                Arc::new(velocity_array) as ArrayRef,
+                Arc::new(energy_array) as ArrayRef,
+            ],
+        ).map_err(|_| SimError::InvalidValue("failed to create record batch"))?;
+
+        writer.write(&batch)
+            .map_err(|_| SimError::InvalidValue("failed to write record batch to parquet"))?;
+
+        rows.clear();
+        Ok(())
+    }
+
+    fn close_parquet_writer(writer: ArrowWriter<File>) -> Result<(), SimError> {
+        writer.close()
+            .map_err(|_| SimError::InvalidValue("failed to close parquet writer"))?;
+        Ok(())
     }
 
     fn step_runner(&mut self, runner: usize, step: usize) -> Result<(), SimError> {
@@ -299,7 +393,7 @@ impl MonteCarloSimulation {
 
         // firt calculate all the resistive forces
         let v_rel = current_v + headwind; // relative velocity for drag calculation
-        let f_resistance = Acceleration::new::<meter_per_second_squared>(gravity_mps2())*theta 
+        let f_resistance = Acceleration::new::<meter_per_second_squared>(gravity_mps2())*theta.sin()
                         + (0.5*rho*cd*area*v_rel*v_rel)/mass;
 
         // calculate the actual force applied by the runner, which is limited by the maximum thrust
