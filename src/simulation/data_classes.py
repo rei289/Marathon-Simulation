@@ -35,7 +35,7 @@ class Params:
     alpha: list[float]                  # absorption coefficient for solar radiation (dimensionless)
     psi: list[float]                    # weighting factor for the drop in aerobic power per temperature (dimensionless)
 
-    pacing_strat: list[str]          # pacing strategy type (e.g., "constant", "even effort")
+    pacing_strat: list[str]             # pacing strategy type (e.g., "constant", "even effort")
     const_v: list[float]                # constant velocity for "constant" pacing strategy (m/s)
 
 @dataclass

@@ -1,7 +1,9 @@
 """Test script to deploy directly in GCP."""
 import os
+import time
 
 import numpy as np
+import psutil
 from dotenv import load_dotenv
 
 from src.simulation.data_classes import Params, SimConfig
@@ -12,26 +14,49 @@ from src.simulation.monte_carlo_simulation import (
 from src.utilis.helper import job_id, time_now
 from src.utilis.logger import StrideSimLogger
 
+
+def memory_usage() -> None:
+    """Print the current memory usage."""
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    print(f"Current memory usage: {mem_info.rss / (1024 * 1024):.2f} MB")
+
 params = Params(
-    f_max=[9.0, 12.0],
-    e_init=[1800.0, 2600.0],
-    tau=[0.8, 1.2],
-    sigma=[20.0, 35.0],
-    gamma=[3e-5, 8e-5],
-    drag_coefficient=[0.9, 1.1],
-    frontal_area=[0.4, 0.55],
-    mass=[60.0, 80.0],
+    f_max=[10.0],
+    e_init=[2200.0],
+    tau=[1.0],
+    sigma=[28.0],
+    gamma=[5e-5],
+    drag_coefficient=[1.0],
+    frontal_area=[0.48],
+    mass=[70.0],
     rho=[1.225],
     convection=[10.0],
-    alpha=[0.6, 0.8],
-    psi=[0.003, 0.007],
-    const_v=[3.0, 5.0],
-    pacing_strat=["constant velocity", "even effort"],
+    alpha=[0.7],
+    psi=[0.005],
+    const_v=[4.0],
+    pacing_strat=["constant velocity"],
 )
+# params = Params(
+#     f_max=[9.0, 12.0],
+#     e_init=[1800.0, 2600.0],
+#     tau=[0.8, 1.2],
+#     sigma=[20.0, 35.0],
+#     gamma=[3e-5, 8e-5],
+#     drag_coefficient=[0.9, 1.1],
+#     frontal_area=[0.4, 0.55],
+#     mass=[60.0, 80.0],
+#     rho=[1.225],
+#     convection=[10.0],
+#     alpha=[0.6, 0.8],
+#     psi=[0.003, 0.007],
+#     const_v=[3.0, 5.0],
+#     pacing_strat=["constant velocity", "even effort"],
+# )
 
 sim_cfg = SimConfig(
     target_dist=4300,
-    num_sim=100,
+    num_sim=10000,
     dt=0.1,
     max_steps=20000,
 )
@@ -44,7 +69,7 @@ if __name__ == "__main__":
     folder_name = "03_simulations"
 
     # determine execution environment
-    execution_env = os.getenv("EXECUTION_ENV", "unknown")
+    execution_env = os.getenv("EXECUTION_ENV", "local")
 
     if execution_env == "local":
         # save results to local file system
@@ -73,6 +98,7 @@ if __name__ == "__main__":
         logger.warning(warn_message)
 
     try:
+        start_time = time.perf_counter()
         logger.info("Starting Monte Carlo Simulation...")
         # @fix make this more flexible by allowing the user to specify the date of the run to use for fitting the model parameters
         df_input = create_dataframes(params, sim_cfg.num_sim)
@@ -85,6 +111,10 @@ if __name__ == "__main__":
 
         # perform the simulation
         sim.run()
+
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+        logger.info(f"Monte Carlo Simulation completed in {elapsed_time:.2f} seconds.")
 
         logger.info("Monte Carlo Simulation completed successfully.")
 
@@ -113,5 +143,7 @@ if __name__ == "__main__":
     finally:
         logger.info("Closing logger")
         logger_mgr.close_logger(logger)
+        memory_usage()
+
 
 

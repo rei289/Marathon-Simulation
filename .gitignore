@@ -14,3 +14,5 @@ notes.txt
 .vscode/
 /local_results
 /running_simulation_data
+/rust_sim/target
+/rust_sim/Cargo.lock
