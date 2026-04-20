@@ -28,6 +28,7 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 const PARQUET_CHUNK_ROWS: usize = 50_000;
+const RUNNER_BATCH_SIZE: usize = 1000;
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -202,6 +203,9 @@ impl MonteCarloSimulation {
     }
 
     pub fn simulate(&mut self) -> Result<SimulationResult, SimError> {
+        /*
+        Use to simulate the monte carlo process
+         */
         let n = self.input.config.num_sim;
         let tmax = self.input.config.max_steps;
 
@@ -364,6 +368,9 @@ impl MonteCarloSimulation {
     }
 
     fn step_runner(&mut self, runner: usize, step: usize) -> Result<(), SimError> {
+        /*
+        Use to perform one time step update for a given runner, calculating its current location and all the physics
+         */
         if step > self.input.config.max_steps {
             return Err(SimError::InvalidValue("step out of bounds"));
         }
