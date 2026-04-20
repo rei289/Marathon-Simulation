@@ -10,9 +10,7 @@ use uom::si::velocity::meter_per_second;
 use uom::si::acceleration::meter_per_second_squared;
 use uom::si::available_energy::joule_per_kilogram;
 use uom::si::specific_power::watt_per_kilogram;
-use uom::si::area::square_meter;
 use uom::si::mass::kilogram;
-use uom::si::mass_density::kilogram_per_cubic_meter;
 use uom::si::heat_transfer::watt_per_square_meter_kelvin;
 use uom::si::thermodynamic_temperature::degree_celsius;
 use uom::si::heat_flux_density::watt_per_square_meter;
@@ -21,10 +19,10 @@ use crate::constants::*;
 
 use std::fs::File;
 use std::sync::Arc;
-use std::path::Path;
 use arrow_array::{
-    ArrayRef, BooleanArray, Float64Array, RecordBatch, UInt32Array,
+    ArrayRef, Float64Array, RecordBatch, UInt32Array, Int32Array, DictionaryArray
 };
+use arrow_array::types::Int32Type;
 use arrow_schema::{DataType, Field, Schema};
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
@@ -102,12 +100,12 @@ pub struct RunnerState {
 pub struct ResultRow {
     pub runner: u32,
     pub time_s: f64,
-    pub distance_m: f64,
     pub velocity_mps: f64,
     pub energy_j_per_kg: f64,
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct RunnerSummary {
     pub finished: bool,
     pub finish_time: Option<Time>,
@@ -116,12 +114,14 @@ pub struct RunnerSummary {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct SimulationResult {
     pub summaries: Vec<RunnerSummary>,
     pub time: Vec<Time>,
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum SimError {
     InvalidConfig(&'static str),
     LengthMismatch(&'static str),
@@ -181,10 +181,6 @@ impl MonteCarloSimulation {
             let mut velocity = vec![None; input.config.max_steps + 1];
             let mut distance = vec![None; input.config.max_steps + 1];
             let mut time_elapsed = vec![None; input.config.max_steps + 1];
-            // let mut energy = vec![AvailableEnergy::new::<joule_per_kilogram>(0.0); input.config.max_steps + 1];
-            // let velocity = vec![Velocity::new::<meter_per_second>(0.0); input.config.max_steps + 1];
-            // let distance = vec![Length::new::<meter>(0.0); input.config.max_steps + 1];
-            // let time_elapsed = vec![Time::new::<second>(0.0); input.config.max_steps + 1];
             let finished_step = None;
 
             // set initial values
@@ -236,35 +232,34 @@ impl MonteCarloSimulation {
                 self.input.runners[runner].const_f = const_f;
             }
 
-            for step in 0..=tmax {
+            for step in 0..=tmax-1 {
                 self.step_runner(runner, step)?;
 
                 //TODO: save results at each step to parquet file for later analysis
                 let time_s = self.state[runner].time_elapsed[step].ok_or(SimError::InvalidValue("missing time before save"))?.get::<second>();
-                let distance_m = self.state[runner].distance[step].ok_or(SimError::InvalidValue("missing distance before save"))?.get::<meter>();
                 let velocity_mps = self.state[runner].velocity[step].ok_or(SimError::InvalidValue("missing velocity before save"))?.get::<meter_per_second>();
                 let energy_j_per_kg = self.state[runner].energy[step].ok_or(SimError::InvalidValue("missing energy before save"))?.get::<joule_per_kilogram>();
 
                 row_buffer.push(ResultRow {
                     runner: runner as u32,
                     time_s,
-                    distance_m,
                     velocity_mps,
                     energy_j_per_kg,
                 });
 
                 if row_buffer.len() >= PARQUET_CHUNK_ROWS {
-                    Self::flush_parquet_rows(&mut writer, &mut row_buffer)?;
+                    Self::flush_parquet_rows(self, &mut writer, &mut row_buffer)?;
                 }
 
                 // check if runner has finished (either from reaching target distance, max steps, or velocity dropping to 0)
                 if self.state[runner].distance[step].ok_or(SimError::InvalidValue("missing distance at step"))? >= self.input.config.target_dist {
                     self.state[runner].finished_step = Some(step + 1);
                     break;
-                } else if self.state[runner].velocity[step].ok_or(SimError::InvalidValue("missing velocity at step"))? <= Velocity::new::<meter_per_second>(0.0) {
+                } else if self.state[runner].velocity[step].ok_or(SimError::InvalidValue("missing velocity at step"))? <= Velocity::new::<meter_per_second>(1e-8) &&
+                     self.state[runner].energy[step].ok_or(SimError::InvalidValue("missing energy at step"))? <= AvailableEnergy::new::<joule_per_kilogram>(1e-8) {
                     self.state[runner].finished_step = Some(step + 1);
                     break;
-                } else if step == tmax {
+                } else if step == tmax - 1 {
                     self.state[runner].finished_step = Some(step + 1);
                     break;
                 }
@@ -272,7 +267,7 @@ impl MonteCarloSimulation {
         }
 
         if !row_buffer.is_empty() {
-            Self::flush_parquet_rows(&mut writer, &mut row_buffer)?;
+            Self::flush_parquet_rows(self, &mut writer, &mut row_buffer)?;
         }
         Self::close_parquet_writer(writer)?;
 
@@ -297,31 +292,51 @@ impl MonteCarloSimulation {
 
         Ok(SimulationResult { summaries, time: time_s })
     }
+
     fn parquet_schema() -> Arc<Schema> {
         Arc::new(Schema::new(vec![
-            Field::new("runner", DataType::UInt32, false),
+            Field::new(
+                "runner_id",
+                DataType::Dictionary(
+                    Box::new(DataType::Int32),   // key/index type
+                    Box::new(DataType::UInt32),  // dictionary value type
+                ),
+                false,
+            ),
             Field::new("time_s", DataType::Float64, false),
-            Field::new("distance_m", DataType::Float64, false),
             Field::new("velocity_mps", DataType::Float64, false),
-            Field::new("energy_j_per_kg", DataType::Float64, false),
+            Field::new("energy_jpkg", DataType::Float64, false),
         ]))
     }
 
     fn make_parquet_writer(path: &str) -> Result<ArrowWriter<File>, SimError> {
         let file = File::create(path)
             .map_err(|_| SimError::InvalidValue("failed to create parquet file"))?;
-        let props = WriterProperties::builder().build();
+        let props = WriterProperties::builder()
+            .set_dictionary_enabled(true)
+            .build();
         ArrowWriter::try_new(file, Self::parquet_schema(), Some(props))
             .map_err(|_| SimError::InvalidValue("failed to create parquet writer"))
     }
 
     fn flush_parquet_rows(
+        &self,
         writer: &mut ArrowWriter<File>,
         rows: &mut Vec<ResultRow>,
     ) -> Result<(), SimError> {
-        let runner_array = UInt32Array::from(rows.iter().map(|r| r.runner).collect::<Vec<u32>>());
+        let keys = Int32Array::from(
+            rows.iter().map(|r| r.runner as i32).collect::<Vec<i32>>()
+        );
+
+        let dict_values = UInt32Array::from(
+            (0..self.input.config.num_sim as u32).collect::<Vec<u32>>()
+        );
+
+        let runner_array = DictionaryArray::<Int32Type>::try_new(
+            keys,
+            Arc::new(dict_values) as ArrayRef,
+        ).map_err(|_| SimError::InvalidValue("failed to build runner_id dictionary"))?;
         let time_array = Float64Array::from(rows.iter().map(|r| r.time_s).collect::<Vec<f64>>());
-        let distance_array = Float64Array::from(rows.iter().map(|r| r.distance_m).collect::<Vec<f64>>());
         let velocity_array = Float64Array::from(rows.iter().map(|r| r.velocity_mps).collect::<Vec<f64>>());
         let energy_array = Float64Array::from(rows.iter().map(|r| r.energy_j_per_kg).collect::<Vec<f64>>());
 
@@ -330,7 +345,6 @@ impl MonteCarloSimulation {
             vec![
                 Arc::new(runner_array) as ArrayRef,
                 Arc::new(time_array) as ArrayRef,
-                Arc::new(distance_array) as ArrayRef,
                 Arc::new(velocity_array) as ArrayRef,
                 Arc::new(energy_array) as ArrayRef,
             ],
@@ -364,7 +378,7 @@ impl MonteCarloSimulation {
         // determine the desired acceleration based on the pacing strategy and current state
         let f_desired = match params.pacing {
             PacingStrategy::Constant => (params.const_v - self.state[runner].velocity[step].ok_or(SimError::InvalidValue("missing velocity at step"))?)/dt,
-            PacingStrategy::EvenEffort => Acceleration::new::<meter_per_second_squared>(0.0),
+            PacingStrategy::EvenEffort => params.const_f,
         };
 
         // where the math model calculates monte carlo

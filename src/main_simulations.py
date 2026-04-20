@@ -1,5 +1,6 @@
 """Test script to deploy directly in GCP."""
 import os
+import resource
 import time
 
 import numpy as np
@@ -115,7 +116,8 @@ if __name__ == "__main__":
         end_time = time.perf_counter()
         elapsed_time = end_time - start_time
         logger.info(f"Monte Carlo Simulation completed in {elapsed_time:.2f} seconds.")
-        memory_usage()
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        print(f"Peak memory: {peak / 1024:,.2f} MB")
 
         logger.info("Monte Carlo Simulation completed successfully.")
 

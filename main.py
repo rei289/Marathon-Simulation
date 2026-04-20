@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import resource
 import statistics
 import time
 
@@ -31,7 +32,7 @@ def main() -> None:
 
     config = stride_sim_rust.SimulationConfig(
         target_dist=4300,
-        num_sim=1000,
+        num_sim=10_000,
         dt=0.1,
         max_steps=20000,
         result_path="test.parquet",
@@ -92,8 +93,8 @@ def main() -> None:
         print(f"First 5 finish times (s): {finished_times[:5]}")
     else:
         print("No runners finished in this smoke test.")
-    memory_usage()
-
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    print(f"Peak memory: {peak / 1024:,.2f} MB")
 
 if __name__ == "__main__":
     main()
