@@ -8,7 +8,7 @@ use monte_carlo_simulation::{
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyList};
 
 use uom::si::f64::*;
 use uom::si::length::meter;
@@ -283,12 +283,13 @@ fn module_info() -> &'static str {
 
 #[pyfunction]
 fn run_simulation(
-	py: Python<'_>,
+	_py: Python<'_>,
 	config: PyRef<'_, SimulationConfig>,
 	weather: PyRef<'_, Weather>,
 	course: PyRef<'_, CourseProfile>,
 	runners: &Bound<'_, PyList>,
-) -> PyResult<PyObject> {
+) -> PyResult<()> {
+// ) -> PyResult<PyObject> {
 	let mut core_runners = Vec::with_capacity(runners.len());
 	for item in runners.iter() {
 		let runner: PyRef<'_, RunnerParams> = item.extract()?;
@@ -305,24 +306,11 @@ fn run_simulation(
 	let mut sim = MonteCarloSimulation::new(input)
 		.map_err(|err| PyValueError::new_err(format!("init error: {:?}", err)))?;
 
-	let result = sim
+	let _ = sim
 		.simulate()
 		.map_err(|err| PyValueError::new_err(format!("simulate error: {:?}", err)))?;
 
-	let summaries_py = PyList::empty_bound(py);
-	for summary in result.summaries {
-		let row = PyDict::new_bound(py);
-		row.set_item("finished", summary.finished)?;
-		row.set_item("finish_time_s", summary.finish_time.map(|t| t.get::<second>()).unwrap_or(f64::NAN))?;
-		row.set_item("finish_distance_m", summary.finish_distance.get::<meter>())?;
-		row.set_item("final_energy", summary.final_energy.get::<joule_per_kilogram>())?;
-		summaries_py.append(row)?;
-	}
-
-	let out = PyDict::new_bound(py);
-	out.set_item("time_s", result.time.iter().map(|t| t.get::<second>()).collect::<Vec<f64>>())?;
-	out.set_item("summaries", summaries_py)?;
-	Ok(out.into_py(py))
+	Ok(())
 }
 
 #[pymodule]

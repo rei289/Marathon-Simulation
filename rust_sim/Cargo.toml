@@ -16,3 +16,7 @@ uom = "0.38.0"
 arrow-array = "53"
 arrow-schema = "53"
 parquet = { version = "53", features = ["arrow"] }
+dhat="0.3"
+
+[profile.release]
+debug = true

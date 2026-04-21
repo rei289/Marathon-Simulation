@@ -22,10 +22,11 @@ mod monte_carlo_simulation;
 mod constants;
 
 fn main() {
+    let _profiler = dhat::Profiler::new_heap();
     let config = SimulationConfig {
         target_dist: Length::new::<meter>(42_195.0),
-        num_sim: 1_000,
-        dt: Time::new::<second>(1.0),
+        num_sim: 5000,
+        dt: Time::new::<second>(0.5),
         max_steps: 15_000,
         result_path: "results.parquet".to_string(),
     };
@@ -78,12 +79,5 @@ fn main() {
         }
     };
 
-    match simulation.simulate() {
-        Ok(result) => {
-            println!("simulated {} runners", result.summaries.len());
-        }
-        Err(err) => {
-            eprintln!("simulation failed: {:?}", err);
-        }
-    }
+    let _ = simulation.simulate();
 }

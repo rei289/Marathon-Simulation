@@ -10,7 +10,6 @@ use uom::si::velocity::meter_per_second;
 use uom::si::acceleration::meter_per_second_squared;
 use uom::si::available_energy::joule_per_kilogram;
 use uom::si::specific_power::watt_per_kilogram;
-use uom::si::mass::kilogram;
 use uom::si::heat_transfer::watt_per_square_meter_kelvin;
 use uom::si::thermodynamic_temperature::degree_celsius;
 use uom::si::heat_flux_density::watt_per_square_meter;
@@ -20,15 +19,16 @@ use crate::constants::*;
 use std::fs::File;
 use std::sync::Arc;
 use arrow_array::{
-    ArrayRef, Float64Array, RecordBatch, UInt32Array, Int32Array, DictionaryArray
+    ArrayRef, Float64Array, RecordBatch, UInt32Array
 };
-use arrow_array::types::Int32Type;
 use arrow_schema::{DataType, Field, Schema};
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 
 const PARQUET_CHUNK_ROWS: usize = 50_000;
-const RUNNER_BATCH_SIZE: usize = 1000;
+
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -88,13 +88,13 @@ pub struct SimulationInput {
     pub runners: Vec<RunnerParams>, // len must equal num_sim
 }
 
-#[derive(Debug)]
-pub struct RunnerState {
-    velocity: Vec<Option<Velocity>>, // [runner, step]
-    energy: Vec<Option<AvailableEnergy>>,   // [runner, step]
-    distance: Vec<Option<Length>>, // [runner, step]
-    time_elapsed: Vec<Option<Time>>, // [runner, step]
-    finished_step: Option<usize>, // step at which runner finished, None if not finished
+#[derive(Debug, Clone)]
+struct RunnerState {
+    velocity: Velocity,
+    energy: AvailableEnergy,
+    distance: Length,
+    time_elapsed: Time,
+    finished_step: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -132,7 +132,19 @@ pub enum SimError {
 
 pub struct MonteCarloSimulation {
     input: SimulationInput,
-    state: Vec<RunnerState>,
+}
+
+impl RunnerState {
+    fn new(runner: &RunnerParams) -> Self {
+
+        Self {
+            velocity: Velocity::new::<meter_per_second>(1e-6),
+            energy: runner.e_init,
+            distance: Length::new::<meter>(0.0),
+            time_elapsed: Time::new::<second>(0.0),
+            finished_step: None,
+        }
+    }
 }
 
 impl MonteCarloSimulation {
@@ -162,47 +174,10 @@ impl MonteCarloSimulation {
             return Err(SimError::LengthMismatch("course vectors must have equal lengths"));
         }
 
-        let mut state = Vec::with_capacity(input.config.num_sim);
-        for runner in &input.runners {
-            if runner.mass <= Mass::new::<kilogram>(0.0) {
-                return Err(SimError::InvalidValue("runner mass must be > 0"));
-            }
-            if runner.tau <= Time::new::<second>(0.0) {
-                return Err(SimError::InvalidValue("runner tau must be > 0"));
-            }
-            if runner.e_init < AvailableEnergy::new::<joule_per_kilogram>(0.0) {
-                return Err(SimError::InvalidValue("runner e_init must be >= 0"));
-            }
-            if runner.f_max < Acceleration::new::<meter_per_second_squared>(0.0) {
-                return Err(SimError::InvalidValue("runner f_max must be >= 0"));
-            }
-
-            // initialize the state for each runner
-            let mut energy = vec![None; input.config.max_steps + 1];
-            let mut velocity = vec![None; input.config.max_steps + 1];
-            let mut distance = vec![None; input.config.max_steps + 1];
-            let mut time_elapsed = vec![None; input.config.max_steps + 1];
-            let finished_step = None;
-
-            // set initial values
-            energy[0] = Some(runner.e_init);
-            velocity[0] = Some(Velocity::new::<meter_per_second>(1e-6));
-            distance[0] = Some(Length::new::<meter>(0.0));
-            time_elapsed[0] = Some(Time::new::<second>(0.0));
-            state.push(RunnerState {
-                velocity,
-                energy,
-                distance,
-                time_elapsed,
-                finished_step,
-            });
-
-        }
-
-        Ok(Self { input, state })
+        Ok(Self { input })
     }
 
-    pub fn simulate(&mut self) -> Result<SimulationResult, SimError> {
+    pub fn simulate(&mut self) -> Result<(), SimError> {
         /*
         Use to simulate the monte carlo process
          */
@@ -212,61 +187,46 @@ impl MonteCarloSimulation {
         let mut writer = Self::make_parquet_writer(&self.input.config.result_path)?;
         let mut row_buffer: Vec<ResultRow> = Vec::with_capacity(PARQUET_CHUNK_ROWS);
 
+        // initialize state for each runner and perform the simulation
         for runner in 0..n {
-            // first update the sigma values for all runners based on the weather conditions and their individual psi parameters
-            let wbgt_c = self.get_wbgt(runner)?.get::<degree_celsius>();
-            let ref_temp_c = reference_temp_c();
-            let temp_diff = (wbgt_c - ref_temp_c).max(0.0);
-            let psi = self.input.runners[runner].psi;
-            self.input.runners[runner].sigma *= 1.0 - psi * temp_diff;
+            // calculate the new input parameters for this runner based on the weather conditions and their individual psi parameters, then perform the simulation for this runner until they finish or reach max steps
+            self.init_runner(runner)?;
+            let runner_param = &self.input.runners[runner];
 
-            // also update the k value which is just the 2 times of gamma
-            self.input.runners[runner].k = Frequency::new::<hertz>(2.0 * self.input.runners[runner].gamma.get::<hertz>());
+            // initialize the state for this runner
+            let mut state = RunnerState::new(runner_param);
 
-            // if pacing strategy is even effort, calculate the constant acceleration
-            if self.input.runners[runner].pacing == PacingStrategy::EvenEffort {
-                let (rho, cd, area, mass, const_v, tau) = {
-                    let r = &self.input.runners[runner];
-                    (r.rho, r.drag_coefficient, r.frontal_area, r.mass, r.const_v, r.tau)
-                };
+            // perform the simulation for this runner until they finish or reach max steps
+            for step in 0..tmax {
+                // check if runner has finished
+                if state.distance >= self.input.config.target_dist {
+                    state.finished_step = Some(step);
+                    break;
+                }
 
-                let f_resist = 0.5 * rho * cd * area * const_v * const_v / mass;
-                let const_f = f_resist + (const_v / tau);
+                if state.velocity <= Velocity::new::<meter_per_second>(1e-8)
+                    && state.energy <= AvailableEnergy::new::<joule_per_kilogram>(1e-8)
+                {
+                    state.finished_step = Some(step);
+                    break;
+                }
 
-                self.input.runners[runner].const_f = const_f;
-            }
-
-            for step in 0..=tmax-1 {
-                self.step_runner(runner, step)?;
-
-                //TODO: save results at each step to parquet file for later analysis
-                let time_s = self.state[runner].time_elapsed[step].ok_or(SimError::InvalidValue("missing time before save"))?.get::<second>();
-                let velocity_mps = self.state[runner].velocity[step].ok_or(SimError::InvalidValue("missing velocity before save"))?.get::<meter_per_second>();
-                let energy_j_per_kg = self.state[runner].energy[step].ok_or(SimError::InvalidValue("missing energy before save"))?.get::<joule_per_kilogram>();
-
+                if step >= tmax {
+                    state.finished_step = Some(step);
+                }
+                
                 row_buffer.push(ResultRow {
                     runner: runner as u32,
-                    time_s,
-                    velocity_mps,
-                    energy_j_per_kg,
+                    time_s: state.time_elapsed.get::<second>(),
+                    velocity_mps: state.velocity.get::<meter_per_second>(),
+                    energy_j_per_kg: state.energy.get::<joule_per_kilogram>(),
                 });
 
                 if row_buffer.len() >= PARQUET_CHUNK_ROWS {
                     Self::flush_parquet_rows(self, &mut writer, &mut row_buffer)?;
                 }
 
-                // check if runner has finished (either from reaching target distance, max steps, or velocity dropping to 0)
-                if self.state[runner].distance[step].ok_or(SimError::InvalidValue("missing distance at step"))? >= self.input.config.target_dist {
-                    self.state[runner].finished_step = Some(step + 1);
-                    break;
-                } else if self.state[runner].velocity[step].ok_or(SimError::InvalidValue("missing velocity at step"))? <= Velocity::new::<meter_per_second>(1e-8) &&
-                     self.state[runner].energy[step].ok_or(SimError::InvalidValue("missing energy at step"))? <= AvailableEnergy::new::<joule_per_kilogram>(1e-8) {
-                    self.state[runner].finished_step = Some(step + 1);
-                    break;
-                } else if step == tmax - 1 {
-                    self.state[runner].finished_step = Some(step + 1);
-                    break;
-                }
+                self.step_runner(runner_param, &mut state)?;
             }
         }
 
@@ -275,38 +235,44 @@ impl MonteCarloSimulation {
         }
         Self::close_parquet_writer(writer)?;
 
-        let mut summaries = Vec::with_capacity(n);
-        for runner in 0..n {
-            let end_step = self.state[runner].finished_step.unwrap_or(tmax);
-            let finished = self.state[runner].finished_step.is_some();
-            let finish_time_s = self.state[runner].finished_step
-                .map(|s| s as f64 * self.input.config.dt);
+        Ok(())
+    }
 
-            summaries.push(RunnerSummary {
-                finished,
-                finish_time: finish_time_s,
-                finish_distance: self.state[runner].distance[end_step].ok_or(SimError::InvalidValue("missing distance at step"))?,
-                final_energy: self.state[runner].energy[end_step].ok_or(SimError::InvalidValue("missing energy at step"))?,
-            });
+    fn init_runner(
+        &mut self,
+        runner_idx: usize,
+    ) -> Result<(), SimError> {
+        // first update the sigma values for all runners based on the weather conditions and their individual psi parameters
+        let wbgt_c = self.get_wbgt(&self.input.runners[runner_idx])?.get::<degree_celsius>();
+        // let wbgt_c = self.get_wbgt(runner_param)?.get::<degree_celsius>();
+        let ref_temp_c = reference_temp_c();
+        let temp_diff = (wbgt_c - ref_temp_c).max(0.0);
+        let psi = self.input.runners[runner_idx].psi;
+        self.input.runners[runner_idx].sigma *= 1.0 - psi * temp_diff;
+        
+        
+        // also update the k value which is just the 2 times of gamma
+        self.input.runners[runner_idx].k = Frequency::new::<hertz>(2.0 * self.input.runners[runner_idx].gamma.get::<hertz>());
+        
+        // if pacing strategy is even effort, calculate the constant acceleration
+        if self.input.runners[runner_idx].pacing == PacingStrategy::EvenEffort {
+            let (rho, cd, area, mass, const_v, tau) = {
+                let r = &self.input.runners[runner_idx];
+                (r.rho, r.drag_coefficient, r.frontal_area, r.mass, r.const_v, r.tau)
+            };
+            
+            let f_resist = 0.5 * rho * cd * area * const_v * const_v / mass;
+            let const_f = f_resist + (const_v / tau);
+            
+            self.input.runners[runner_idx].const_f = const_f;
         }
 
-        let time_s = (0..=tmax)
-            .map(|step| step as f64 * self.input.config.dt)
-            .collect();
-
-        Ok(SimulationResult { summaries, time: time_s })
+        Ok(())
     }
 
     fn parquet_schema() -> Arc<Schema> {
         Arc::new(Schema::new(vec![
-            Field::new(
-                "runner_id",
-                DataType::Dictionary(
-                    Box::new(DataType::Int32),   // key/index type
-                    Box::new(DataType::UInt32),  // dictionary value type
-                ),
-                false,
-            ),
+            Field::new("runner_id", DataType::UInt32, false),
             Field::new("time_s", DataType::Float64, false),
             Field::new("velocity_mps", DataType::Float64, false),
             Field::new("energy_jpkg", DataType::Float64, false),
@@ -328,18 +294,7 @@ impl MonteCarloSimulation {
         writer: &mut ArrowWriter<File>,
         rows: &mut Vec<ResultRow>,
     ) -> Result<(), SimError> {
-        let keys = Int32Array::from(
-            rows.iter().map(|r| r.runner as i32).collect::<Vec<i32>>()
-        );
-
-        let dict_values = UInt32Array::from(
-            (0..self.input.config.num_sim as u32).collect::<Vec<u32>>()
-        );
-
-        let runner_array = DictionaryArray::<Int32Type>::try_new(
-            keys,
-            Arc::new(dict_values) as ArrayRef,
-        ).map_err(|_| SimError::InvalidValue("failed to build runner_id dictionary"))?;
+        let runner_array = UInt32Array::from(rows.iter().map(|r| r.runner).collect::<Vec<u32>>());
         let time_array = Float64Array::from(rows.iter().map(|r| r.time_s).collect::<Vec<f64>>());
         let velocity_array = Float64Array::from(rows.iter().map(|r| r.velocity_mps).collect::<Vec<f64>>());
         let energy_array = Float64Array::from(rows.iter().map(|r| r.energy_j_per_kg).collect::<Vec<f64>>());
@@ -367,50 +322,45 @@ impl MonteCarloSimulation {
         Ok(())
     }
 
-    fn step_runner(&mut self, runner: usize, step: usize) -> Result<(), SimError> {
+    fn step_runner(&self, runner_params: &RunnerParams, state: &mut RunnerState) -> Result<(), SimError> {
         /*
         Use to perform one time step update for a given runner, calculating its current location and all the physics
          */
-        if step > self.input.config.max_steps {
-            return Err(SimError::InvalidValue("step out of bounds"));
-        }
-
         let dt = self.input.config.dt;
-        let params = &self.input.runners[runner];
 
         // determine the grade and headwind at the runner's current distance
-        let grade = self.get_grade(self.state[runner].distance[step].ok_or(SimError::InvalidValue("missing distance at step"))?)?;
-        let headwind = self.get_headwind(self.state[runner].distance[step].ok_or(SimError::InvalidValue("missing distance at step"))?)?;
+        let grade = self.get_grade(state.distance)?;
+        let headwind = self.get_headwind(state.distance)?;
 
         // determine the desired acceleration based on the pacing strategy and current state
-        let f_desired = match params.pacing {
-            PacingStrategy::Constant => (params.const_v - self.state[runner].velocity[step].ok_or(SimError::InvalidValue("missing velocity at step"))?)/dt,
-            PacingStrategy::EvenEffort => params.const_f,
+        let f_desired = match runner_params.pacing {
+            PacingStrategy::Constant => (runner_params.const_v - state.velocity)/dt,
+            PacingStrategy::EvenEffort => runner_params.const_f,
         };
 
         // where the math model calculates monte carlo
-        self.math_model(runner, step, f_desired, grade, headwind)?;
+        self.math_model(runner_params, state, f_desired, grade, headwind)?;
         
 
         Ok(())
     }
 
-    fn math_model(&mut self, runner: usize, step: usize, f_desired: Acceleration, theta: f64, headwind: Velocity) -> Result<(), SimError> {
+    fn math_model(&self,  runner_params: &RunnerParams, state: &mut RunnerState, f_desired: Acceleration, theta: f64, headwind: Velocity) -> Result<(), SimError> {
         /*
         Model the physics of the runner's movement for one time step, updating the velocity, energy, and distance in the state.
          */
         // define local variables for readability
         let (rho, cd, area, mass, e_init, tau, sigma, k, f_max) = {
-            let r = &self.input.runners[runner];
+            let r = runner_params;
             (r.rho, r.drag_coefficient, r.frontal_area, r.mass, r.e_init, r.tau, r.sigma, r.k, r.f_max)
         };
 
         let dt = self.input.config.dt;
 
-        let current_v = self.state[runner].velocity[step].ok_or(SimError::InvalidValue("missing velocity at step"))?;
-        let current_e = self.state[runner].energy[step].ok_or(SimError::InvalidValue("missing energy at step"))?;
-        let current_t = self.state[runner].time_elapsed[step].ok_or(SimError::InvalidValue("missing time at step"))?;
-        let current_d = self.state[runner].distance[step].ok_or(SimError::InvalidValue("missing distance at step"))?;
+        let current_v = state.velocity;
+        let current_e = state.energy;
+        let current_t = state.time_elapsed;
+        let current_d = state.distance;
 
         // firt calculate all the resistive forces
         let v_rel = current_v + headwind; // relative velocity for drag calculation
@@ -448,12 +398,12 @@ impl MonteCarloSimulation {
             current_e + de*dt
         };
 
-        self.state[runner].velocity[step + 1] = Some(v_next);
-        self.state[runner].energy[step + 1] = Some(e_next);
+        state.velocity = v_next;
+        state.energy = e_next;
 
         // update distance and time
-        self.state[runner].distance[step + 1] = Some(current_d + v_next * dt);
-        self.state[runner].time_elapsed[step + 1] = Some(current_t + dt);
+        state.distance = current_d + v_next * dt;
+        state.time_elapsed = current_t + dt;
 
         Ok(())
     }
@@ -499,7 +449,7 @@ impl MonteCarloSimulation {
         Ok(course.headwind[closest_index])
     }
 
-    fn get_wbgt(&self, runner: usize) -> Result<ThermodynamicTemperature, SimError> {
+    fn get_wbgt(&self, runner: &RunnerParams) -> Result<ThermodynamicTemperature, SimError> {
         /*
         Helper function to calculate the Wet Bulb Globe Temperature (WBGT) based on the weather conditions.
          */
@@ -509,8 +459,8 @@ impl MonteCarloSimulation {
         let temp_c = weather.temperature.get::<degree_celsius>();
         let humidity_percent = weather.humidity; // already in percentage
         let solar_w_m2 = weather.solar_radiation.get::<watt_per_square_meter>();
-        let conv_w_m2k = self.input.runners[runner].convection.get::<watt_per_square_meter_kelvin>();
-        let alpha = self.input.runners[runner].alpha;
+        let conv_w_m2k = runner.convection.get::<watt_per_square_meter_kelvin>();
+        let alpha = runner.alpha;
 
         let temp_w = temp_c * (0.151977*((humidity_percent + 8.313659).powf(0.5))).atan()
             + (temp_c + humidity_percent).atan()

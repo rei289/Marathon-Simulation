@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import resource
-import statistics
 import time
 
 import psutil
@@ -34,7 +33,7 @@ def main() -> None:
         target_dist=4300,
         num_sim=10_000,
         dt=0.1,
-        max_steps=20000,
+        max_steps=20_000,
         result_path="test.parquet",
         # result_path="running_simulation_data/03_simulations/test.parquet",
 
@@ -79,20 +78,10 @@ def main() -> None:
     ]
 
     start = time.time()
-    result = stride_sim_rust.run_simulation(config, weather, course, runners)
+    stride_sim_rust.run_simulation(config, weather, course, runners)
     elapsed = time.time() - start
 
-    summaries = result["summaries"]
-    finished_times = [s["finish_time_s"] for s in summaries if s["finish_time_s"] is not None]
-
     print(f"Rust simulation wall time (s): {elapsed:.3f}")
-    print(f"Total runners: {len(summaries)}")
-    print(f"Finished runners: {len(finished_times)}")
-    if finished_times:
-        print(f"Average finish time (s): {statistics.mean(finished_times):.2f}")
-        print(f"First 5 finish times (s): {finished_times[:5]}")
-    else:
-        print("No runners finished in this smoke test.")
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     print(f"Peak memory: {peak / 1024:,.2f} MB")
 
