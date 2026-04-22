@@ -30,10 +30,11 @@ def main() -> None:
     print(stride_sim_rust.module_info())
 
     config = stride_sim_rust.SimulationConfig(
-        target_dist=4300,
+        target_dist=43_000,
         num_sim=10_000,
         dt=0.1,
-        max_steps=20_000,
+        max_steps=200_000,
+        sample_rate=1.0,  # sample every 1 second
         result_path="test.parquet",
         # result_path="running_simulation_data/03_simulations/test.parquet",
 

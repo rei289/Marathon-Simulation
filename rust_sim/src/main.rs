@@ -28,6 +28,7 @@ fn main() {
         num_sim: 5000,
         dt: Time::new::<second>(0.5),
         max_steps: 15_000,
+        sample_rate: Time::new::<second>(10.0),
         result_path: "results.parquet".to_string(),
     };
 

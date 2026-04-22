@@ -27,9 +27,6 @@ use parquet::file::properties::WriterProperties;
 
 const PARQUET_CHUNK_ROWS: usize = 50_000;
 
-#[global_allocator]
-static ALLOC: dhat::Alloc = dhat::Alloc;
-
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PacingStrategy {
@@ -39,11 +36,12 @@ pub enum PacingStrategy {
 
 #[derive(Clone, Debug)]
 pub struct SimulationConfig {
-    pub target_dist: Length,           // target distance in meters   
-    pub num_sim: usize,
-    pub dt: Time,
-    pub max_steps: usize,
-    pub result_path: String,                // path to save results (e.g. parquet file)
+    pub target_dist: Length,            // target distance in meters   
+    pub num_sim: usize,                 // number of monte carlo simulations to run (i.e. how many runners to simulate)
+    pub dt: Time,                       // time step for the simulation (e.g. 0.1 means simulate every 0.1 seconds)
+    pub max_steps: usize,               // maximum number of steps to simulate for each runner (to prevent infinite loops if they can't finish)
+    pub sample_rate: Time,              // time in seconds to simulate before writing to parquet (e.g. 100 means write every 100 seconds)
+    pub result_path: String,            // path to save results (e.g. parquet file)
 }
 
 #[derive(Clone, Debug)]
@@ -98,28 +96,19 @@ struct RunnerState {
 }
 
 #[derive(Debug, Clone)]
-pub struct ResultRow {
-    pub runner: u32,
-    pub time_s: f64,
-    pub velocity_mps: f64,
-    pub energy_j_per_kg: f64,
+pub struct ResultBatch {
+    pub runner: Vec<u32>,
+    pub time_s: Vec<f64>,
+    pub velocity_mps: Vec<f64>,
+    pub energy_jpkg: Vec<f64>,
 }
-
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct RunnerSummary {
-    pub finished: bool,
-    pub finish_time: Option<Time>,
-    pub finish_distance: Length,
-    pub final_energy: AvailableEnergy,
-}
-
-#[derive(Debug)]
-#[allow(dead_code)]
-pub struct SimulationResult {
-    pub summaries: Vec<RunnerSummary>,
-    pub time: Vec<Time>,
-}
+// #[derive(Debug, Clone)]
+// pub struct ResultRow {
+//     pub runner: u32,
+//     pub time_s: f64,
+//     pub velocity_mps: f64,
+//     pub energy_j_per_kg: f64,
+// }
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -144,6 +133,36 @@ impl RunnerState {
             time_elapsed: Time::new::<second>(0.0),
             finished_step: None,
         }
+    }
+}
+
+impl ResultBatch {
+    fn new() -> Self {
+        Self {
+            runner: Vec::with_capacity(PARQUET_CHUNK_ROWS),
+            time_s: Vec::with_capacity(PARQUET_CHUNK_ROWS),
+            velocity_mps: Vec::with_capacity(PARQUET_CHUNK_ROWS),
+            energy_jpkg: Vec::with_capacity(PARQUET_CHUNK_ROWS),
+        }
+    }
+
+    fn take_columns(&mut self) -> (Vec<u32>, Vec<f64>, Vec<f64>, Vec<f64>) {
+        (
+            std::mem::replace(&mut self.runner, Vec::with_capacity(PARQUET_CHUNK_ROWS)),
+            std::mem::replace(&mut self.time_s, Vec::with_capacity(PARQUET_CHUNK_ROWS)),
+            std::mem::replace(&mut self.velocity_mps, Vec::with_capacity(PARQUET_CHUNK_ROWS)),
+            std::mem::replace(&mut self.energy_jpkg, Vec::with_capacity(PARQUET_CHUNK_ROWS)),
+        )
+    }
+
+    // standard length method
+    pub fn len(&self) -> usize {
+        self.runner.len()
+    }
+
+    // always implement this if you have len()
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -185,7 +204,11 @@ impl MonteCarloSimulation {
         let tmax = self.input.config.max_steps;
 
         let mut writer = Self::make_parquet_writer(&self.input.config.result_path)?;
-        let mut row_buffer: Vec<ResultRow> = Vec::with_capacity(PARQUET_CHUNK_ROWS);
+        // let mut row_buffer: Vec<ResultRow> = Vec::with_capacity(PARQUET_CHUNK_ROWS);
+        let mut row_buffer = ResultBatch::new();
+
+        let mut count = 0;
+        let sample_rate_steps = (self.input.config.sample_rate.get::<second>() / self.input.config.dt.get::<second>()).round() as usize;
 
         // initialize state for each runner and perform the simulation
         for runner in 0..n {
@@ -210,23 +233,22 @@ impl MonteCarloSimulation {
                     state.finished_step = Some(step);
                     break;
                 }
-
-                if step >= tmax {
-                    state.finished_step = Some(step);
-                }
                 
-                row_buffer.push(ResultRow {
-                    runner: runner as u32,
-                    time_s: state.time_elapsed.get::<second>(),
-                    velocity_mps: state.velocity.get::<meter_per_second>(),
-                    energy_j_per_kg: state.energy.get::<joule_per_kilogram>(),
-                });
+                // determine if we should write to parquet based on sample_rate
+                if count == sample_rate_steps {
+                    row_buffer.runner.push(runner as u32);
+                    row_buffer.time_s.push(state.time_elapsed.get::<second>());
+                    row_buffer.velocity_mps.push(state.velocity.get::<meter_per_second>());
+                    row_buffer.energy_jpkg.push(state.energy.get::<joule_per_kilogram>());
+                    count = 0; // reset the counter
+                }
 
                 if row_buffer.len() >= PARQUET_CHUNK_ROWS {
                     Self::flush_parquet_rows(self, &mut writer, &mut row_buffer)?;
                 }
 
                 self.step_runner(runner_param, &mut state)?;
+                count += 1;
             }
         }
 
@@ -292,13 +314,19 @@ impl MonteCarloSimulation {
     fn flush_parquet_rows(
         &self,
         writer: &mut ArrowWriter<File>,
-        rows: &mut Vec<ResultRow>,
+        results: &mut ResultBatch,
+        // rows: &mut Vec<ResultRow>,
     ) -> Result<(), SimError> {
-        let runner_array = UInt32Array::from(rows.iter().map(|r| r.runner).collect::<Vec<u32>>());
-        let time_array = Float64Array::from(rows.iter().map(|r| r.time_s).collect::<Vec<f64>>());
-        let velocity_array = Float64Array::from(rows.iter().map(|r| r.velocity_mps).collect::<Vec<f64>>());
-        let energy_array = Float64Array::from(rows.iter().map(|r| r.energy_j_per_kg).collect::<Vec<f64>>());
+        // let runner_array = UInt32Array::from(rows.iter().map(|r| r.runner).collect::<Vec<u32>>());
+        // let time_array = Float64Array::from(rows.iter().map(|r| r.time_s).collect::<Vec<f64>>());
+        // let velocity_array = Float64Array::from(rows.iter().map(|r| r.velocity_mps).collect::<Vec<f64>>());
+        // let energy_array = Float64Array::from(rows.iter().map(|r| r.energy_j_per_kg).collect::<Vec<f64>>());
+        let (runner_col, time_col, velocity_col, energy_col) = results.take_columns();
 
+        let runner_array = UInt32Array::from(runner_col);
+        let time_array = Float64Array::from(time_col);
+        let velocity_array = Float64Array::from(velocity_col);
+        let energy_array = Float64Array::from(energy_col);
         let batch = RecordBatch::try_new(
             Self::parquet_schema(),
             vec![
@@ -312,7 +340,7 @@ impl MonteCarloSimulation {
         writer.write(&batch)
             .map_err(|_| SimError::InvalidValue("failed to write record batch to parquet"))?;
 
-        rows.clear();
+        // results.clear();
         Ok(())
     }
 

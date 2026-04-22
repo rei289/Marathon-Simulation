@@ -37,19 +37,22 @@ struct SimulationConfig {
 	#[pyo3(get, set)]
 	max_steps: usize,
 	#[pyo3(get, set)]
+	sample_rate: f64,
+	#[pyo3(get, set)]
 	result_path: String,
 }
 
 #[pymethods]
 impl SimulationConfig {
 	#[new]
-	#[pyo3(signature = (target_dist, num_sim, dt, max_steps, result_path))]
-	fn new(target_dist: f64, num_sim: usize, dt: f64, max_steps: usize, result_path: String) -> Self {
+	#[pyo3(signature = (target_dist, num_sim, dt, max_steps, sample_rate, result_path))]
+	fn new(target_dist: f64, num_sim: usize, dt: f64, max_steps: usize, sample_rate: f64, result_path: String) -> Self {
 		Self {
 			target_dist,
 			num_sim,
 			dt,
 			max_steps,
+			sample_rate,
 			result_path,
 		}
 	}
@@ -62,6 +65,7 @@ impl SimulationConfig {
 			num_sim: self.num_sim,
 			dt: Time::new::<second>(self.dt),
 			max_steps: self.max_steps,
+			sample_rate: Time::new::<second>(self.sample_rate),
 			result_path: self.result_path.clone(),
 		}
 	}
