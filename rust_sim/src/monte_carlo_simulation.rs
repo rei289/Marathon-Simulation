@@ -19,7 +19,7 @@ use crate::constants::*;
 use std::fs::File;
 use std::sync::Arc;
 use arrow_array::{
-    ArrayRef, Float64Array, RecordBatch, UInt32Array
+    ArrayRef, RecordBatch, UInt32Array, Float32Array
 };
 use arrow_schema::{DataType, Field, Schema};
 use parquet::arrow::ArrowWriter;
@@ -98,17 +98,10 @@ struct RunnerState {
 #[derive(Debug, Clone)]
 pub struct ResultBatch {
     pub runner: Vec<u32>,
-    pub time_s: Vec<f64>,
-    pub velocity_mps: Vec<f64>,
-    pub energy_jpkg: Vec<f64>,
+    pub time_s: Vec<f32>,
+    pub velocity_mps: Vec<f32>,
+    pub energy_jpkg: Vec<f32>,
 }
-// #[derive(Debug, Clone)]
-// pub struct ResultRow {
-//     pub runner: u32,
-//     pub time_s: f64,
-//     pub velocity_mps: f64,
-//     pub energy_j_per_kg: f64,
-// }
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -146,7 +139,7 @@ impl ResultBatch {
         }
     }
 
-    fn take_columns(&mut self) -> (Vec<u32>, Vec<f64>, Vec<f64>, Vec<f64>) {
+    fn take_columns(&mut self) -> (Vec<u32>, Vec<f32>, Vec<f32>, Vec<f32>) {
         (
             std::mem::replace(&mut self.runner, Vec::with_capacity(PARQUET_CHUNK_ROWS)),
             std::mem::replace(&mut self.time_s, Vec::with_capacity(PARQUET_CHUNK_ROWS)),
@@ -237,9 +230,9 @@ impl MonteCarloSimulation {
                 // determine if we should write to parquet based on sample_rate
                 if count == sample_rate_steps {
                     row_buffer.runner.push(runner as u32);
-                    row_buffer.time_s.push(state.time_elapsed.get::<second>());
-                    row_buffer.velocity_mps.push(state.velocity.get::<meter_per_second>());
-                    row_buffer.energy_jpkg.push(state.energy.get::<joule_per_kilogram>());
+                    row_buffer.time_s.push(state.time_elapsed.get::<second>() as f32);
+                    row_buffer.velocity_mps.push(state.velocity.get::<meter_per_second>() as f32);
+                    row_buffer.energy_jpkg.push(state.energy.get::<joule_per_kilogram>() as f32);
                     count = 0; // reset the counter
                 }
 
@@ -295,9 +288,9 @@ impl MonteCarloSimulation {
     fn parquet_schema() -> Arc<Schema> {
         Arc::new(Schema::new(vec![
             Field::new("runner_id", DataType::UInt32, false),
-            Field::new("time_s", DataType::Float64, false),
-            Field::new("velocity_mps", DataType::Float64, false),
-            Field::new("energy_jpkg", DataType::Float64, false),
+            Field::new("time_s", DataType::Float32, false),
+            Field::new("velocity_mps", DataType::Float32, false),
+            Field::new("energy_jpkg", DataType::Float32, false),
         ]))
     }
 
@@ -324,9 +317,9 @@ impl MonteCarloSimulation {
         let (runner_col, time_col, velocity_col, energy_col) = results.take_columns();
 
         let runner_array = UInt32Array::from(runner_col);
-        let time_array = Float64Array::from(time_col);
-        let velocity_array = Float64Array::from(velocity_col);
-        let energy_array = Float64Array::from(energy_col);
+        let time_array = Float32Array::from(time_col);
+        let velocity_array = Float32Array::from(velocity_col);
+        let energy_array = Float32Array::from(energy_col);
         let batch = RecordBatch::try_new(
             Self::parquet_schema(),
             vec![
