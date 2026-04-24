@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 name = "stride_sim_rust"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pyo3 = { version = "0.21", features = ["extension-module"] }
@@ -16,7 +16,13 @@ uom = "0.38.0"
 arrow-array = "53"
 arrow-schema = "53"
 parquet = { version = "53", features = ["arrow"] }
-dhat="0.3"
+
+[dev-dependencies]
+tempfile = "3"
 
 [profile.release]
 debug = true
+
+[[test]]
+name = "unit_tests"
+path = "../tests/test_unit.rs"

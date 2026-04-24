@@ -22,7 +22,6 @@ mod monte_carlo_simulation;
 mod constants;
 
 fn main() {
-    let _profiler = dhat::Profiler::new_heap();
     let config = SimulationConfig {
         target_dist: Length::new::<meter>(42_195.0),
         num_sim: 5000,

@@ -18,16 +18,6 @@ def memory_usage() -> None:
 
 def main() -> None:
     """Run a smoke test of the Rust simulation module."""
-    # try:
-    #     import stride_sim_rust
-    # except ImportError as exc:
-    #     error_message = (
-    #         "Could not import stride_sim_rust. Build/install it first:\n"
-    #         "  cd rust_sim\n"
-    #         "  maturin develop\n"
-    #     )
-    #     raise SystemExit(error_message) from exc
-
     print(stride_sim_rust.module_info())
 
     config = stride_sim_rust.SimulationConfig(
@@ -36,8 +26,7 @@ def main() -> None:
         dt=0.1,
         max_steps=200_000,
         sample_rate=1.0,  # sample every 1 second
-        result_path="test.parquet",
-        # result_path="running_simulation_data/03_simulations/test.parquet",
+        result_path="rust_sim",
 
     )
 
@@ -45,22 +34,17 @@ def main() -> None:
         temperature=None,
         humidity=None,
         solar_radiation=None,
-        # temperature=20.0,
-        # humidity=0.50,
-        # solar_radiation=800.0,
     )
 
     course = stride_sim_rust.CourseProfile(
         distance=None,
         grade=None,
         headwind=None,
-        # distance_m=[0.0, 10_000.0, 20_000.0, 30_000.0, 42_195.0],
-        # grade=[0.0, 0.0, 0.0, 0.0, 0.0],
-        # headwind_mps=[0.0, 0.0, 0.0, 0.0, 0.0],
     )
 
     runners = [
         stride_sim_rust.RunnerParams(
+            runner_id=i,
             f_max=10.0,
             e_init=2200.0,
             tau=1.0,
@@ -76,7 +60,7 @@ def main() -> None:
             const_v=4.0,
             pacing="constant",
         )
-        for _ in range(config.num_sim)
+        for i in range(config.num_sim)
     ]
 
     config.result_path = "testing_random.parquet"

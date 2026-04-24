@@ -8,6 +8,9 @@ from src.simulation.monte_carlo_simulation import MonteCarloSimulation, create_d
 from src.simulation.pacing_strategy import PacingStrategy
 from src.utilis.helper import get_param_info
 
+import stride_sim_rust
+from stride_sim_rust import SimulationConfig, Weather, CourseProfile, RunnerParams
+
 
 @pytest.fixture
 def sim_cfg() -> SimConfig:

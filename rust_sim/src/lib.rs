@@ -1,4 +1,4 @@
-mod monte_carlo_simulation;
+pub mod monte_carlo_simulation;
 mod constants;
 
 use monte_carlo_simulation::{
