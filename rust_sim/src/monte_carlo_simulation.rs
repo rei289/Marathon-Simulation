@@ -19,11 +19,13 @@ use crate::constants::*;
 use std::fs::File;
 use std::sync::Arc;
 use arrow_array::{
-    ArrayRef, RecordBatch, UInt32Array, Float32Array
+    ArrayRef, RecordBatch, UInt32Array, Float32Array, StringArray
 };
 use arrow_schema::{DataType, Field, Schema};
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
+use std::path::PathBuf;
+
 
 const PARQUET_CHUNK_ROWS: usize = 50_000;
 
@@ -60,6 +62,7 @@ pub struct CourseProfile {
 
 #[derive(Clone, Debug)]
 pub struct RunnerParams {
+    pub runner_id: u32,               // unique identifier for the runner
     pub f_max: Acceleration,            // maximum thrust (m/s^2)
     pub e_init: AvailableEnergy,        // initial energy (m^2/s^2)
     pub tau: Time,                      // resistance coefficient (s)
@@ -196,8 +199,9 @@ impl MonteCarloSimulation {
         let n = self.input.config.num_sim;
         let tmax = self.input.config.max_steps;
 
+        // initialize parquet writer and row buffer for writing results in batches
+
         let mut writer = Self::make_parquet_writer(&self.input.config.result_path)?;
-        // let mut row_buffer: Vec<ResultRow> = Vec::with_capacity(PARQUET_CHUNK_ROWS);
         let mut row_buffer = ResultBatch::new();
 
         let mut count = 0;
@@ -250,6 +254,9 @@ impl MonteCarloSimulation {
         }
         Self::close_parquet_writer(writer)?;
 
+        // write the runner parameters to a separate parquet file for analysis
+        self.write_runner_params_parquet()?;
+
         Ok(())
     }
 
@@ -295,13 +302,17 @@ impl MonteCarloSimulation {
     }
 
     fn make_parquet_writer(path: &str) -> Result<ArrowWriter<File>, SimError> {
-        let file = File::create(path)
-            .map_err(|_| SimError::InvalidValue("failed to create parquet file"))?;
+        std::fs::create_dir_all(path)
+            .map_err(|_| SimError::InvalidValue("failed to create result directory"))?;
+        let out_path = PathBuf::from(path).join("simulation_results.parquet");
+
+        let file = File::create(out_path)
+            .map_err(|_| SimError::InvalidValue("failed to create simulation result parquet file"))?;
         let props = WriterProperties::builder()
             .set_dictionary_enabled(true)
             .build();
         ArrowWriter::try_new(file, Self::parquet_schema(), Some(props))
-            .map_err(|_| SimError::InvalidValue("failed to create parquet writer"))
+            .map_err(|_| SimError::InvalidValue("failed to create simulation result parquet writer"))
     }
 
     fn flush_parquet_rows(
@@ -310,10 +321,6 @@ impl MonteCarloSimulation {
         results: &mut ResultBatch,
         // rows: &mut Vec<ResultRow>,
     ) -> Result<(), SimError> {
-        // let runner_array = UInt32Array::from(rows.iter().map(|r| r.runner).collect::<Vec<u32>>());
-        // let time_array = Float64Array::from(rows.iter().map(|r| r.time_s).collect::<Vec<f64>>());
-        // let velocity_array = Float64Array::from(rows.iter().map(|r| r.velocity_mps).collect::<Vec<f64>>());
-        // let energy_array = Float64Array::from(rows.iter().map(|r| r.energy_j_per_kg).collect::<Vec<f64>>());
         let (runner_col, time_col, velocity_col, energy_col) = results.take_columns();
 
         let runner_array = UInt32Array::from(runner_col);
@@ -342,6 +349,106 @@ impl MonteCarloSimulation {
             .map_err(|_| SimError::InvalidValue("failed to close parquet writer"))?;
         Ok(())
     }
+
+fn runner_params_schema() -> Arc<Schema> {
+    Arc::new(Schema::new(vec![
+        Field::new("runner_id", DataType::UInt32, false),
+        Field::new("f_max_mps2", DataType::Float32, false),
+        Field::new("e_init_jpkg", DataType::Float32, false),
+        Field::new("tau_s", DataType::Float32, false),
+        Field::new("sigma_wpkg", DataType::Float32, false),
+        Field::new("gamma_hz", DataType::Float32, false),
+        Field::new("drag_coefficient", DataType::Float32, false),
+        Field::new("frontal_area_m2", DataType::Float32, false),
+        Field::new("mass_kg", DataType::Float32, false),
+        Field::new("rho_kgpm3", DataType::Float32, false),
+        Field::new("convection_wpm2k", DataType::Float32, false),
+        Field::new("alpha", DataType::Float32, false),
+        Field::new("psi", DataType::Float32, false),
+        Field::new("const_v_mps", DataType::Float32, false),
+        Field::new("pacing", DataType::Utf8, false),
+    ]))
+}
+
+fn write_runner_params_parquet(&self) -> Result<(), SimError> {
+    std::fs::create_dir_all(&self.input.config.result_path)
+        .map_err(|_| SimError::InvalidValue("failed to create result directory"))?;
+
+    let out_path = PathBuf::from(&self.input.config.result_path).join("runner_params.parquet");
+    let file = File::create(&out_path)
+        .map_err(|_| SimError::InvalidValue("failed to create runner params parquet"))?;
+
+    let mut writer = ArrowWriter::try_new(file, Self::runner_params_schema(), Some(
+        WriterProperties::builder().set_dictionary_enabled(true).build()
+    ))
+    .map_err(|_| SimError::InvalidValue("failed to create runner params writer"))?;
+
+    let mut runner_id = Vec::with_capacity(self.input.runners.len());
+    let mut f_max = Vec::with_capacity(self.input.runners.len());
+    let mut e_init = Vec::with_capacity(self.input.runners.len());
+    let mut tau = Vec::with_capacity(self.input.runners.len());
+    let mut sigma = Vec::with_capacity(self.input.runners.len());
+    let mut gamma = Vec::with_capacity(self.input.runners.len());
+    let mut drag = Vec::with_capacity(self.input.runners.len());
+    let mut area = Vec::with_capacity(self.input.runners.len());
+    let mut mass = Vec::with_capacity(self.input.runners.len());
+    let mut rho = Vec::with_capacity(self.input.runners.len());
+    let mut convection = Vec::with_capacity(self.input.runners.len());
+    let mut alpha = Vec::with_capacity(self.input.runners.len());
+    let mut psi = Vec::with_capacity(self.input.runners.len());
+    let mut const_v = Vec::with_capacity(self.input.runners.len());
+    let mut pacing = Vec::with_capacity(self.input.runners.len());
+
+    for r in &self.input.runners {
+        runner_id.push(r.runner_id);
+        f_max.push(r.f_max.get::<meter_per_second_squared>() as f32);
+        e_init.push(r.e_init.get::<joule_per_kilogram>() as f32);
+        tau.push(r.tau.get::<second>() as f32);
+        sigma.push(r.sigma.get::<watt_per_kilogram>() as f32);
+        gamma.push(r.gamma.get::<hertz>() as f32);
+        drag.push(r.drag_coefficient as f32);
+        area.push(r.frontal_area.get::<uom::si::area::square_meter>() as f32);
+        mass.push(r.mass.get::<uom::si::mass::kilogram>() as f32);
+        rho.push(r.rho.get::<uom::si::mass_density::kilogram_per_cubic_meter>() as f32);
+        convection.push(r.convection.get::<watt_per_square_meter_kelvin>() as f32);
+        alpha.push(r.alpha as f32);
+        psi.push(r.psi as f32);
+        const_v.push(r.const_v.get::<meter_per_second>() as f32);
+        pacing.push(match r.pacing {
+            PacingStrategy::Constant => "constant",
+            PacingStrategy::EvenEffort => "even_effort",
+        });
+    }
+
+    let batch = RecordBatch::try_new(
+        Self::runner_params_schema(),
+        vec![
+            Arc::new(UInt32Array::from(runner_id)) as ArrayRef,
+            Arc::new(Float32Array::from(f_max)) as ArrayRef,
+            Arc::new(Float32Array::from(e_init)) as ArrayRef,
+            Arc::new(Float32Array::from(tau)) as ArrayRef,
+            Arc::new(Float32Array::from(sigma)) as ArrayRef,
+            Arc::new(Float32Array::from(gamma)) as ArrayRef,
+            Arc::new(Float32Array::from(drag)) as ArrayRef,
+            Arc::new(Float32Array::from(area)) as ArrayRef,
+            Arc::new(Float32Array::from(mass)) as ArrayRef,
+            Arc::new(Float32Array::from(rho)) as ArrayRef,
+            Arc::new(Float32Array::from(convection)) as ArrayRef,
+            Arc::new(Float32Array::from(alpha)) as ArrayRef,
+            Arc::new(Float32Array::from(psi)) as ArrayRef,
+            Arc::new(Float32Array::from(const_v)) as ArrayRef,
+            Arc::new(StringArray::from(pacing)) as ArrayRef,
+        ],
+    )
+    .map_err(|_| SimError::InvalidValue("failed to create runner params batch"))?;
+
+    writer.write(&batch)
+        .map_err(|_| SimError::InvalidValue("failed to write runner params batch"))?;
+    writer.close()
+        .map_err(|_| SimError::InvalidValue("failed to close runner params writer"))?;
+    Ok(())
+}
+
 
     fn step_runner(&self, runner_params: &RunnerParams, state: &mut RunnerState) -> Result<(), SimError> {
         /*

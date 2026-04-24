@@ -17,7 +17,6 @@ struct Physics {
 #[derive(Debug, Deserialize)]
 struct ConstantEntry {
     value: f64,
-    unit: String,
 }
 
 

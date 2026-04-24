@@ -34,6 +34,7 @@ fn main() {
 
     let runners = (0..config.num_sim)
         .map(|_| RunnerParams {
+            runner_id: 0, // placeholder, will be set in MonteCarloSimulation::new
             f_max: Acceleration::new::<meter_per_second_squared>(3.0),
             e_init: AvailableEnergy::new::<joule_per_kilogram>(50_000.0),
             tau: Time::new::<second>(200.0),

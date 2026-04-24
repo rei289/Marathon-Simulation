@@ -7,6 +7,7 @@ import resource
 import time
 
 import psutil
+import stride_sim_rust
 
 
 def memory_usage() -> None:
@@ -17,15 +18,15 @@ def memory_usage() -> None:
 
 def main() -> None:
     """Run a smoke test of the Rust simulation module."""
-    try:
-        import stride_sim_rust
-    except ImportError as exc:
-        error_message = (
-            "Could not import stride_sim_rust. Build/install it first:\n"
-            "  cd rust_sim\n"
-            "  maturin develop\n"
-        )
-        raise SystemExit(error_message) from exc
+    # try:
+    #     import stride_sim_rust
+    # except ImportError as exc:
+    #     error_message = (
+    #         "Could not import stride_sim_rust. Build/install it first:\n"
+    #         "  cd rust_sim\n"
+    #         "  maturin develop\n"
+    #     )
+    #     raise SystemExit(error_message) from exc
 
     print(stride_sim_rust.module_info())
 
@@ -77,6 +78,8 @@ def main() -> None:
         )
         for _ in range(config.num_sim)
     ]
+
+    config.result_path = "testing_random.parquet"
 
     start = time.time()
     stride_sim_rust.run_simulation(config, weather, course, runners)

@@ -162,6 +162,8 @@ impl CourseProfile {
 #[derive(Clone)]
 struct RunnerParams {
 	#[pyo3(get, set)]
+	runner_id: u32,
+	#[pyo3(get, set)]
 	f_max: f64,
 	#[pyo3(get, set)]
 	e_init: f64,
@@ -196,6 +198,7 @@ impl RunnerParams {
 	#[new]
 	#[allow(clippy::too_many_arguments)]
 	#[pyo3(signature = (
+		runner_id,
 		f_max,
 		e_init,
 		tau,
@@ -212,6 +215,7 @@ impl RunnerParams {
 		pacing="constant".to_string()
 	))]
 	fn new(
+		runner_id: u32,
 		f_max: f64,
 		e_init: f64,
 		tau: f64,
@@ -228,6 +232,7 @@ impl RunnerParams {
 		pacing: String,
 	) -> Self {
 		Self {
+			runner_id,
 			f_max,
 			e_init,
 			tau,
@@ -260,6 +265,7 @@ impl RunnerParams {
 		};
 
 		Ok(CoreRunnerParams {
+			runner_id: self.runner_id,
 			f_max: Acceleration::new::<meter_per_second_squared>(self.f_max),
 			e_init: AvailableEnergy::new::<joule_per_kilogram>(self.e_init),
 			tau: Time::new::<second>(self.tau),

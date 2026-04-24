@@ -33,4 +33,4 @@ notes.txt
 research papers/
 running_simulation_data/
 local_results/
-rust_sim/
+rust_sim/target/

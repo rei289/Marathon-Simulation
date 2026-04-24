@@ -90,4 +90,5 @@ class StrideSimLogger:
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(blob_path)
         blob.upload_from_filename(str(self.log_path))
+        self.log_path.unlink()  # delete the local log file after uploading
         return blob_path
