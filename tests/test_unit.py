@@ -11,7 +11,6 @@ from src.process_runs.process_data import DataProcessor
 @pytest.fixture
 def base_json_data() -> dict:
     """Use to provide a base json data dictionary for testing."""
-
     return {
         "start_date_local": "2025-01-01T00:00:00",
         "weather": {
@@ -48,9 +47,10 @@ def test_rename_columns_maps_expected_names(base_json_data: dict) -> None:
 
 
 def test_minute_to_second_creates_per_second_columns(base_json_data: dict) -> None:
+	"""Use to test that the _minute_to_second method correctly creates per-second columns for heart rate and cadence."""
 	processor = DataProcessor(logging.getLogger("test"), _make_raw_parquet_data(), base_json_data)
 
-	processor._minute_to_second()
+	processor._minute_to_second() # noqa: SLF001
 
 	assert "heartrate_bps" in processor.parquet_data.columns
 	assert "cadence_rps" in processor.parquet_data.columns
@@ -59,6 +59,7 @@ def test_minute_to_second_creates_per_second_columns(base_json_data: dict) -> No
 
 
 def test_interpolate_missing_data_fills_one_second_gap(base_json_data: dict) -> None:
+	"""Use to test that the interpolate_missing_data method correctly fills in a one-second gap in the data."""
 	processor = DataProcessor(logging.getLogger("test"), _make_raw_parquet_data(), base_json_data)
 
 	processor.interpolate_missing_data()
@@ -69,6 +70,7 @@ def test_interpolate_missing_data_fills_one_second_gap(base_json_data: dict) -> 
 
 
 def test_feature_engineering_sets_stride_length_and_wind_features(base_json_data: dict) -> None:
+	"""Use to test that the feature_engineering method correctly sets the stride length and wind features."""
 	parquet_data = {
 		"time_datetime": [
 			pd.Timestamp("2025-01-01 00:00:00"),
