@@ -1,40 +1,57 @@
 """Test script to deploy directly in GCP."""
 import os
+import time
 
-import numpy as np
+import stride_sim_rust
 from dotenv import load_dotenv
 
-from src.simulation.data_classes import Params, SimConfig
 from src.simulation.monte_carlo_simulation import (
     MonteCarloSimulation,
-    create_dataframes,
 )
 from src.utilis.helper import job_id, time_now
 from src.utilis.logger import StrideSimLogger
 
-params = Params(
-    f_max=[9.0, 12.0],
-    e_init=[1800.0, 2600.0],
-    tau=[0.8, 1.2],
-    sigma=[20.0, 35.0],
-    gamma=[3e-5, 8e-5],
-    drag_coefficient=[0.9, 1.1],
-    frontal_area=[0.4, 0.55],
-    mass=[60.0, 80.0],
-    rho=[1.225],
-    convection=[10.0],
-    alpha=[0.6, 0.8],
-    psi=[0.003, 0.007],
-    const_v=[3.0, 5.0],
-    pacing_strat=["constant velocity", "even effort"],
+config = stride_sim_rust.SimulationConfig(
+    target_dist=43_000,
+    num_sim=10_000,
+    dt=0.1,
+    max_steps=200_000,
+    sample_rate=1.0,  # sample every 1 second
+    result_path="test.parquet",
 )
 
-sim_cfg = SimConfig(
-    target_dist=4300,
-    num_sim=100,
-    dt=0.1,
-    max_steps=20000,
+weather = stride_sim_rust.Weather(
+    temperature=20.0,
+    humidity=0.50,
+    solar_radiation=800.0,
 )
+
+course = stride_sim_rust.CourseProfile(
+    distance=[0.0, 10_000.0, 20_000.0, 30_000.0, 42_195.0],
+    grade=[0.0, 0.0, 0.0, 0.0, 0.0],
+    headwind=[0.0, 0.0, 0.0, 0.0, 0.0],
+)
+
+runners = [
+    stride_sim_rust.RunnerParams(
+        runner_id=i,
+        f_max=10.0,
+        e_init=2200.0,
+        tau=1.0,
+        sigma=28.0,
+        gamma=5e-5,
+        drag_coefficient=1.0,
+        frontal_area=0.48,
+        mass=70.0,
+        rho=1.225,
+        convection=10.0,
+        alpha=0.7,
+        psi=0.005,
+        const_v=4.0,
+        pacing="constant",
+    )
+    for i in range(config.num_sim)
+]
 
 if __name__ == "__main__":
     # get the time now
@@ -44,7 +61,7 @@ if __name__ == "__main__":
     folder_name = "03_simulations"
 
     # determine execution environment
-    execution_env = os.getenv("EXECUTION_ENV", "unknown")
+    execution_env = os.getenv("EXECUTION_ENV", "local")
 
     if execution_env == "local":
         # save results to local file system
@@ -54,6 +71,9 @@ if __name__ == "__main__":
         logger_mgr = StrideSimLogger(execution_env=execution_env, bucket_name=bucket_name, folder_name=f"{folder_name}/{jid}")
         logger = logger_mgr.setup_logger()
         logger.info("Running in local environment")
+
+        # change the simulation result path to the local bucket folder
+        config.result_path = f"{bucket_name}/{folder_name}/{jid}"
     elif execution_env == "gcp":
         # get bucket name from environment variable
         bucket_name = os.getenv("BUCKET_NAME")
@@ -66,6 +86,9 @@ if __name__ == "__main__":
             raise ValueError(error)
 
         logger.info("Running in GCP environment")
+
+        # change the simulation result path to a temporary local path
+        config.result_path = "/tmp/stride_sim" # noqa S108
     else:
         logger_mgr = StrideSimLogger(execution_env=execution_env, bucket_name=None, folder_name=f"{folder_name}/{jid}")
         logger = logger_mgr.setup_logger()
@@ -73,35 +96,28 @@ if __name__ == "__main__":
         logger.warning(warn_message)
 
     try:
+        start_time = time.perf_counter()
         logger.info("Starting Monte Carlo Simulation...")
-        # @fix make this more flexible by allowing the user to specify the date of the run to use for fitting the model parameters
-        df_input = create_dataframes(params, sim_cfg.num_sim)
-        parquet_data=None
-        json_data=None
 
-        logger.info("Retrieved input data and created dataframes for simulation.")
-
-        sim = MonteCarloSimulation(logger=logger, cfg=sim_cfg, df_input=df_input, parquet_data=parquet_data, json_data=json_data)
-
-        # perform the simulation
+        sim = MonteCarloSimulation(logger, runners, config, weather, course)
         sim.run()
 
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+        logger.info(f"Monte Carlo Simulation completed in {elapsed_time:.2f} seconds.")
         logger.info("Monte Carlo Simulation completed successfully.")
 
+        # save the results in their respective environment
         if execution_env == "local":
             # save results to local file system
             logger.info(f"Saving results to local bucket folder: {bucket_name}")
             sim.save_to_local_results(bucket_name, folder_name, jid, ts)
             logger.info("Results saved")
-            # print results
-            logger.info(f"Average finish time (s): {np.mean(sim.finish_time)}")
         elif execution_env == "gcp":
             # save results to cloud storage
             logger.info(f"Saving results to GCP bucket: {bucket_name}")
             sim.save_to_cloud_results(bucket_name, folder_name, jid, ts)
             logger.info("Results saved")
-            # print results
-            logger.info(f"Average finish time (s): {np.mean(sim.finish_time)}")
             # save logs to cloud storage
             logger.info("Uploading logs to GCP...")
             log_blob_path = logger_mgr.upload_log_to_gcs(bucket_name)

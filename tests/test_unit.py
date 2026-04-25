@@ -1,136 +1,94 @@
-"""Execute unit tests for the simulation."""
+"""Unit tests for the data processing module."""
 
-import numpy as np
+import logging
+
+import pandas as pd
 import pytest
 
-from src.simulation.data_classes import PacingContext, Params, SimConfig
-from src.simulation.monte_carlo_simulation import MonteCarloSimulation, create_dataframes
-from src.simulation.pacing_strategy import PacingStrategy
-from src.utilis.helper import get_param_info
+from src.process_runs.process_data import DataProcessor
 
 
 @pytest.fixture
-def sim_cfg() -> SimConfig:
-    """Fixture to create a SimConfig instance for testing."""
-    return SimConfig(
-        target_dist=10000,
-        num_sim=1,
-        dt=0.1,
-        max_steps=10000,
-    )
-
-@pytest.fixture
-def params() -> Params:
-    """Fixture to create a Params instance for testing."""
-    return Params(
-        f_max=[10.0],
-        e_init=[2000.0],
-        tau=[1.0],
-        sigma=[25.0],
-        gamma=[5e-5],
-        drag_coefficient=[1.0],
-        frontal_area=[0.5],
-        mass=[70.0],
-        rho=[1.225],
-        convection=[10.0],
-        alpha=[0.7],
-        psi=[0.005],
-        pacing_strat=["constant velocity"],
-        const_v=[5.0],
-    )
-
-@pytest.fixture
-def ctx() -> PacingContext:
-    """Fixture to create a PacingContext instance for testing."""
-    return PacingContext(
-        dt=0.1,
-        velocity=np.array([5.0]),
-        energy=np.array([2000.0]),
-        theta=np.array([0.0]),
-        headwind=np.array([0.0]),
-        tau=np.array([1.0]),
-        mass=np.array([70.0]),
-        rho=np.array([1.225]),
-        drag_coefficient=np.array([1.0]),
-        frontal_area=np.array([0.5]),
-        f_max=np.array([10.0]),
-        const_v=np.array([5.0]),
-    )
-
-@pytest.fixture
-def sim(sim_cfg: SimConfig, params: Params) -> MonteCarloSimulation:
-    """Fixture to create a MonteCarloSimulation instance for testing."""
-    df_input = create_dataframes(params, sim_cfg.num_sim)
-
-    return MonteCarloSimulation(sim_cfg, df_input=df_input, csv_data=None, json_data=None)
-
-# overall simulation tests
-def test_finish_time(sim: MonteCarloSimulation) -> None:
-    """Test that the simulation runs without errors and produces a finish time."""
-    sim.run()
-    assert len(sim.finish_time) == 1
-    assert np.all(sim.finish_time > 0.0 or np.isnan(sim.finish_time))
-
-def test_time_positive(sim: MonteCarloSimulation) -> None:
-    """Test that the finish time is positive."""
-    sim.run()
-    assert np.all(sim.time_elapsed >= 0.0)
-
-def test_distance_positive(sim: MonteCarloSimulation) -> None:
-    """Test that the distance covered is positive."""
-    sim.run()
-    assert np.all(sim.distance_covered >= 0.0)
-
-def test_energy_non_negative(sim: MonteCarloSimulation) -> None:
-    """Test that the energy is non-negative."""
-    sim.run()
-    assert np.all(sim.energy >= 0.0)
-
-def test_velocity_non_negative(sim: MonteCarloSimulation) -> None:
-    """Test that the velocity is non-negative."""
-    sim.run()
-    assert np.all(sim.velocity >= 0.0)
-
-def test_energy_lower_than_initial(sim: MonteCarloSimulation) -> None:
-    """Test that the energy is always lower than or equal to the initial energy."""
-    sim.run()
-    assert np.all(sim.energy <= sim.E0_values)
+def base_json_data() -> dict:
+    """Use to provide a base json data dictionary for testing."""
+    return {
+        "start_date_local": "2025-01-01T00:00:00",
+        "weather": {
+            "winddir": 0,
+            "windspeed": 36,
+        },
+    }
 
 
-# pacing strategy tests
-def test_constant_pace_strategy(sim_cfg: SimConfig, ctx: PacingContext) -> None:
-    """Test that the ConstantPaceStrategy returns the correct target velocity."""
-    strat = PacingStrategy(sim_cfg)
-    target_velocity = strat.constant_pace(ctx)
-    assert np.all(target_velocity == 5.0)
+def _make_raw_parquet_data() -> dict:
+    return {
+        "time": [0, 2],
+        "heartrate": [120, 126],
+        "cadence": [180, 186],
+        "distance": [0.0, 6.0],
+        "altitude": [10.0, 10.2],
+        "velocity": [3.0, 3.0],
+        "grade": [0.0, 0.0],
+        "moving": [True, True],
+        "latitude": [40.0, 40.0],
+        "longitude": [-74.0, -74.0],
+    }
 
-def test_even_effort_strategy(sim_cfg: SimConfig, ctx: PacingContext) -> None:
-    """Test that the EvenEffortStrategy returns a target velocity that is not zero."""
-    strat = PacingStrategy(sim_cfg)
-    target_velocity = strat.even_effort_pace(ctx)
-    assert np.all(target_velocity > 0.0)
 
-# boundary condition tests
-def test_tau(sim: MonteCarloSimulation) -> None:
-    """Test that the tau parameter is between min and max values."""
-    sim.run()
-    min_tau = get_param_info("tau")["min"]
-    max_tau = get_param_info("tau")["max"]
-    assert np.all(sim.tau_values >= min_tau)
-    assert np.all(sim.tau_values <= max_tau)
+def test_rename_columns_maps_expected_names(base_json_data: dict) -> None:
+	"""Use to test that the rename_columns method correctly maps the raw column names to the expected column names."""
+	processor = DataProcessor(logging.getLogger("test"), _make_raw_parquet_data(), base_json_data)
+	assert "time_datetime" in processor.parquet_data.columns
+	assert "heartrate_bpm" in processor.parquet_data.columns
+	assert "cadence_rpm" in processor.parquet_data.columns
+	assert "velocity_mps" in processor.parquet_data.columns
+	assert "latitude_degree" in processor.parquet_data.columns
+	assert "longitude_degree" in processor.parquet_data.columns
 
-def test_sigma(sim: MonteCarloSimulation) -> None:
-    """Test that the sigma parameter is between min and max values."""
-    sim.run()
-    min_sigma = get_param_info("sigma")["min"]
-    max_sigma = get_param_info("sigma")["max"]
-    assert np.all(sim.sigma_values >= min_sigma)
-    assert np.all(sim.sigma_values <= max_sigma)
 
-def test_gamma(sim: MonteCarloSimulation) -> None:
-    """Test that the gamma parameter is between min and max values."""
-    sim.run()
-    min_gamma = get_param_info("gamma")["min"]
-    max_gamma = get_param_info("gamma")["max"]
-    assert np.all(sim.gamma_values >= min_gamma)
-    assert np.all(sim.gamma_values <= max_gamma)
+def test_minute_to_second_creates_per_second_columns(base_json_data: dict) -> None:
+	"""Use to test that the _minute_to_second method correctly creates per-second columns for heart rate and cadence."""
+	processor = DataProcessor(logging.getLogger("test"), _make_raw_parquet_data(), base_json_data)
+
+	processor._minute_to_second() # noqa: SLF001
+
+	assert "heartrate_bps" in processor.parquet_data.columns
+	assert "cadence_rps" in processor.parquet_data.columns
+	assert processor.parquet_data.loc[0, "heartrate_bps"] == pytest.approx(2.0)
+	assert processor.parquet_data.loc[0, "cadence_rps"] == pytest.approx(3.0)
+
+
+def test_interpolate_missing_data_fills_one_second_gap(base_json_data: dict) -> None:
+	"""Use to test that the interpolate_missing_data method correctly fills in a one-second gap in the data."""
+	processor = DataProcessor(logging.getLogger("test"), _make_raw_parquet_data(), base_json_data)
+
+	processor.interpolate_missing_data()
+
+	assert len(processor.parquet_data) == 3
+	assert processor.parquet_data.loc[1, "heartrate_bpm"] == pytest.approx(123.0)
+	assert processor.parquet_data.loc[1, "time_datetime"] == pd.Timestamp("2025-01-01 00:00:01")
+
+
+def test_feature_engineering_sets_stride_length_and_wind_features(base_json_data: dict) -> None:
+	"""Use to test that the feature_engineering method correctly sets the stride length and wind features."""
+	parquet_data = {
+		"time_datetime": [
+			pd.Timestamp("2025-01-01 00:00:00"),
+			pd.Timestamp("2025-01-01 00:00:01"),
+		],
+		"latitude_degree": [40.0, 40.0],
+		"longitude_degree": [-74.0, -73.999],
+		"smooth_altitude_m": [10.0, 10.1],
+		"smooth_heartrate_bps": [2.0, 2.1],
+		"smooth_velocity_mps": [4.0, 4.0],
+		"smooth_cadence_rps": [0.0, 2.0],
+	}
+	processor = DataProcessor(logging.getLogger("test"), parquet_data, base_json_data)
+
+	processor.feature_engineering()
+
+	assert "headwind_mps" in processor.parquet_data.columns
+	assert "crosswind_mps" in processor.parquet_data.columns
+	assert processor.parquet_data.loc[0, "stride_length_m"] == 0
+	assert "winddir_degree" not in processor.parquet_data.columns
+	assert "windspeed_mps" not in processor.parquet_data.columns
