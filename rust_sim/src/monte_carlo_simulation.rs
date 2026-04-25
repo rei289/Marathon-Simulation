@@ -81,7 +81,7 @@ pub struct RunnerParams {
     pub pacing: PacingStrategy,         // pacing strategy type
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SimulationInput {
     pub config: SimulationConfig,
     pub weather: Weather,
@@ -164,7 +164,7 @@ impl ResultBatch {
 
 impl MonteCarloSimulation {
     pub fn new(input: SimulationInput) -> Result<Self, SimError> {
-        // validate input and initialize state
+        // simulation configuration validation
         if input.config.num_sim == 0 {
             return Err(SimError::InvalidConfig("num_sim must be > 0"));
         }
@@ -180,13 +180,25 @@ impl MonteCarloSimulation {
         if input.runners.len() != input.config.num_sim {
             return Err(SimError::LengthMismatch("runners length must match num_sim"));
         }
+        if input.config.sample_rate <= Time::new::<second>(0.0) {
+            return Err(SimError::InvalidConfig("sample_rate must be > 0"));
+        }
 
+        // course profile validation
         let course_len = input.course.distance.len();
         if course_len == 0 {
             return Err(SimError::EmptyCourse("course distance must be non-empty"));
         }
         if input.course.grade.len() != course_len || input.course.headwind.len() != course_len {
             return Err(SimError::LengthMismatch("course vectors must have equal lengths"));
+        }
+        
+        // weather validation
+        if input.weather.humidity < 0.0 || input.weather.humidity > 100.0 {
+            return Err(SimError::InvalidValue("humidity must be between 0 and 100"));
+        }
+        if input.weather.solar_radiation < HeatFluxDensity::new::<watt_per_square_meter>(0.0) {
+            return Err(SimError::InvalidValue("solar radiation must be non-negative"));
         }
 
         Ok(Self { input })
