@@ -16,7 +16,7 @@ config = stride_sim_rust.SimulationConfig(
     num_sim=10_000,
     dt=0.1,
     max_steps=200_000,
-    sample_rate=1.0,  # sample every 1 second
+    sample_rate=2.0,  # sample every 2 seconds
     result_path="test.parquet",
 )
 
