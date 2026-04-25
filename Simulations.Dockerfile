@@ -30,4 +30,4 @@ RUN pip install *.whl && rm *.whl
 COPY requirements-sim.txt .
 RUN pip install --no-cache-dir -r requirements-sim.txt
 
-CMD ["python", "main_simulations.py"]
+CMD ["python", "-m", "src.main_simulations"]
