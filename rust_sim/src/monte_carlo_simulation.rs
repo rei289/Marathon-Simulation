@@ -14,7 +14,7 @@ use uom::si::heat_transfer::watt_per_square_meter_kelvin;
 use uom::si::thermodynamic_temperature::degree_celsius;
 use uom::si::heat_flux_density::watt_per_square_meter;
 
-use crate::constants::*;
+use crate::param_config::*;
 
 use std::fs::File;
 use std::sync::Arc;

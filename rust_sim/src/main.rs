@@ -19,7 +19,7 @@ use uom::si::heat_flux_density::watt_per_square_meter;
 use uom::si::frequency::hertz;
 
 mod monte_carlo_simulation;
-mod constants;
+mod param_config;
 
 fn main() {
     let config = SimulationConfig {

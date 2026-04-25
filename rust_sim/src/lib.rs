@@ -1,5 +1,5 @@
 pub mod monte_carlo_simulation;
-mod constants;
+pub mod param_config;
 
 use monte_carlo_simulation::{
 	CourseProfile as CoreCourseProfile, MonteCarloSimulation, PacingStrategy,

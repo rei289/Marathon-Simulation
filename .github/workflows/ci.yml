@@ -45,8 +45,7 @@ jobs:
           workspaces: rust_sim -> rust_sim/target
 
       - name: Run unit tests
-        run: cargo test --manifest-path [Cargo.toml](http://_vscodecontentref_/5) --all-targets
-
+        run: cargo test --manifest-path rust_sim/Cargo.toml --all-targets
   python-tests:
     runs-on: ubuntu-latest
 
