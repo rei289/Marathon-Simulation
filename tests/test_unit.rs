@@ -30,7 +30,7 @@ fn simulation_writes_output_without_error() {
         dt: Time::new::<second>(1.0),
         max_steps: 2000,
         sample_rate: Time::new::<second>(5.0),
-        result_path: result_path.to_string_lossy().to_string(),
+        result_path: Some(result_path.to_string_lossy().to_string()),
     };
 
     let runners = (0..config.num_sim).map(|i| RunnerParams {
@@ -183,7 +183,7 @@ fn invalid_simulation_inputs_are_rejected() {
             dt: Time::new::<second>(1.0),
             max_steps: 2000,
             sample_rate: Time::new::<second>(5.0),
-            result_path: result_path.to_string_lossy().to_string(),
+            result_path: Some(result_path.to_string_lossy().to_string()),
         },
         weather: Weather {
             temperature: ThermodynamicTemperature::new::<degree_celsius>(20.0),

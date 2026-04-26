@@ -1,25 +1,27 @@
 """Use this script to fit the model parameters to the data."""
 
 import json
+from logging import Logger
 from pathlib import Path
 
 import numpy as np
 import optuna
 import pandas as pd
+import stride_sim_rust
 from scipy import signal
 from scipy.signal import butter, filtfilt
 
-from src.simulation.data_classes import SimConfig
 from src.simulation.monte_carlo_simulation import MonteCarloSimulation
 
 
 class ModelFitter:
     """Use class to fit the model parameters to the data."""
 
-    def __init__(self, parquet_path: str, json_path: str) -> None:
+    def __init__(self, logger: Logger, parquet_path: str, json_path: str) -> None:
         """Initialize the model fitter with the paths to the csv and json data."""
         self.parquet_path = parquet_path
         self.json_path = json_path
+        self.logger = logger
 
         df = pd.read_parquet(parquet_path, engine="pyarrow")
         # expected: time (s), distance (m), velocity (m/s)
@@ -56,38 +58,53 @@ class ModelFitter:
 
     def run_simulation(self, params: dict) -> pd.DataFrame:
         """Run the simulation with the given parameters and return the simulated velocity and time as a dataframe."""
-        sim_cfg = SimConfig(
-            target_dist=self.run_data["total_distance"],
+        config = stride_sim_rust.SimulationConfig(
+            target_dist=43_000,
             num_sim=1,
             dt=0.1,
-            max_steps=20000,
-            const_v=params["const_v"],
-            pacing=params["pacing"],
+            max_steps=200_000,
+            sample_rate=1.0,  # sample every 2 seconds
+            result_path=None,
         )
 
-        # create input dataframe
-        df_input = pd.DataFrame({
-            "f_max": [params["f_max"]],
-            "e_init": [params["e_init"]],
-            "tau": [params["tau"]],
-            "sigma": [params["sigma"]],
-            "gamma": [params["gamma"]],
-            "drag_coefficient": [params["drag_coefficient"]],
-            "frontal_area": [params["frontal_area"]],
-            "mass": [params["mass"]],
-            "rho": [params["rho"]],
-            "convection": [params["convection"]],
-            "alpha": [params["alpha"]],
-            "psi": [params["psi"]],
-        })
+        weather = stride_sim_rust.Weather(
+            temperature=20.0,
+            humidity=0.50,
+            solar_radiation=800.0,
+        )
+
+        course = stride_sim_rust.CourseProfile(
+            distance=[0.0, 10_000.0, 20_000.0, 30_000.0, 42_195.0],
+            grade=[0.0, 0.0, 0.0, 0.0, 0.0],
+            headwind=[0.0, 0.0, 0.0, 0.0, 0.0],
+        )
+
+        runners = [stride_sim_rust.RunnerParams(
+            runner_id=0,
+            f_max=params["f_max"],
+            e_init=params["e_init"],
+            tau=params["tau"],
+            sigma=params["sigma"],
+            gamma=params["gamma"],
+            drag_coefficient=params["drag_coefficient"],
+            frontal_area=params["frontal_area"],
+            mass=params["mass"],
+            rho=params["rho"],
+            convection=params["convection"],
+            alpha=params["alpha"],
+            psi=params["psi"],
+            const_v=params["const_v"],
+            pacing=params["pacing"],
+        )]
 
         # run simulation
-        sim = MonteCarloSimulation(sim_cfg, df_input=df_input, parquet_data=self.parquet_path, json_data=self.json_path)
-        sim.run()
+        sim = MonteCarloSimulation(self.logger, runners, config, weather, course)
+        sim_results = sim.run_collect()
 
         # get the velocity and time arrays from the simulation and make it into a pandas dataframe
-        v_sim = sim.velocity[:, 0]
-        t_sim = sim.time_elapsed
+        v_sim = sim_results[2]  # velocity
+        t_sim = sim_results[1]  # time
+
         return pd.DataFrame({
             "time": t_sim,
             "velocity": v_sim,
@@ -171,14 +188,14 @@ def automatic_cutoff(velocity_residuals: pd.Series, fs: float = 1.0, threshold: 
     cutoff_idx = np.where(cumulative_psd >= total_power * threshold)[0][0]
     return freqs[cutoff_idx]
 
-def model_fitting(date: str, bucket_name: str, train_folder: str = "02_trainings") -> None:
+def model_fitting(logger: Logger, date: str, bucket_name: str, train_folder: str = "02_trainings") -> None:
     """Use to fit the model parameters to the data."""
     # determine which run to use for fitting the model parameters
     parquet_data = f"{bucket_name}/01_runs/{date}/streams.parquet"
     json_data = f"{bucket_name}/01_runs/{date}/overall.json"
 
     # create the model fitter class
-    fitter = ModelFitter(parquet_path = parquet_data, json_path = json_data)
+    fitter = ModelFitter(logger, parquet_path = parquet_data, json_path = json_data)
 
     # create a study object
     study = optuna.create_study(direction="minimize")

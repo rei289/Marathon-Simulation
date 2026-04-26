@@ -43,7 +43,7 @@ pub struct SimulationConfig {
     pub dt: Time,                       // time step for the simulation (e.g. 0.1 means simulate every 0.1 seconds)
     pub max_steps: usize,               // maximum number of steps to simulate for each runner (to prevent infinite loops if they can't finish)
     pub sample_rate: Time,              // time in seconds to simulate before writing to parquet (e.g. 100 means write every 100 seconds)
-    pub result_path: String,            // path to save results (e.g. parquet file)
+    pub result_path: Option<String>,    // path to save results (e.g. parquet file)
 }
 
 #[derive(Clone, Debug)]
@@ -212,19 +212,21 @@ impl MonteCarloSimulation {
         let tmax = self.input.config.max_steps;
 
         // initialize parquet writer and row buffer for writing results in batches
-
-        let mut writer = Self::make_parquet_writer(&self.input.config.result_path)?;
+        let mut writer = match self.input.config.result_path.as_deref() {
+            Some(path) => Some(Self::make_parquet_writer(path)?),
+            None => None,
+        };
         let mut row_buffer = ResultBatch::new();
 
-        let mut count = 0;
         let sample_rate_steps = (self.input.config.sample_rate.get::<second>() / self.input.config.dt.get::<second>()).round() as usize;
-
+        
         // initialize state for each runner and perform the simulation
         for runner in 0..n {
             // calculate the new input parameters for this runner based on the weather conditions and their individual psi parameters, then perform the simulation for this runner until they finish or reach max steps
             self.init_runner(runner)?;
             let runner_param = &self.input.runners[runner];
-
+            
+            let mut count = 0;
             // initialize the state for this runner
             let mut state = RunnerState::new(runner_param);
 
@@ -243,8 +245,9 @@ impl MonteCarloSimulation {
                     break;
                 }
                 
+                // if we have a parquet writer, write the current state to the row buffer at the specified sample rate
+                if writer.is_some() && count == sample_rate_steps {
                 // determine if we should write to parquet based on sample_rate
-                if count == sample_rate_steps {
                     row_buffer.runner.push(runner as u32);
                     row_buffer.time_s.push(state.time_elapsed.get::<second>() as f32);
                     row_buffer.velocity_mps.push(state.velocity.get::<meter_per_second>() as f32);
@@ -252,25 +255,86 @@ impl MonteCarloSimulation {
                     count = 0; // reset the counter
                 }
 
-                if row_buffer.len() >= PARQUET_CHUNK_ROWS {
-                    Self::flush_parquet_rows(self, &mut writer, &mut row_buffer)?;
+                if let Some(w) = writer.as_mut() {
+                    if row_buffer.len() >= PARQUET_CHUNK_ROWS {
+                        Self::flush_parquet_rows( w, &mut row_buffer)?;
+                    }
                 }
 
+                count += 1;
+                self.step_runner(runner_param, &mut state)?;
+            }
+        }
+
+
+        if let Some(w) = writer.as_mut() {
+            if !row_buffer.is_empty() {
+                Self::flush_parquet_rows( w, &mut row_buffer)?;
+            }
+        }
+
+        if let Some(w) = writer {
+            Self::close_parquet_writer(w)?;
+        }
+
+        if let Some(path) = self.input.config.result_path.as_deref() {
+            self.write_runner_params_parquet(path)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn simulate_collect(&mut self) -> Result<ResultBatch, SimError> {
+        /*
+        Use to simulate the monte carlo process and collect results in memory instead of writing to parquet
+         */
+        let n = self.input.config.num_sim;
+        let tmax = self.input.config.max_steps;
+
+        let mut results = ResultBatch::new();
+        let sample_rate_steps = (self.input.config.sample_rate.get::<second>() / self.input.config.dt.get::<second>()).round() as usize;
+
+        // initialize state for each runner and perform the simulation
+        for runner in 0..n {
+            // calculate the new input parameters for this runner based on the weather conditions and their individual psi parameters, then perform the simulation for this runner until they finish or reach max steps
+            self.init_runner(runner)?;
+            let runner_param = &self.input.runners[runner];
+
+            // initialize the state for this runner
+            let mut state = RunnerState::new(runner_param);
+
+            let mut count = 0;
+            // perform the simulation for this runner until they finish or reach max steps
+            for step in 0..tmax {
+                // check if runner has finished
+                if state.distance >= self.input.config.target_dist {
+                    state.finished_step = Some(step);
+                    break;
+                }
+
+                if state.velocity <= Velocity::new::<meter_per_second>(1e-8)
+                    && state.energy <= AvailableEnergy::new::<joule_per_kilogram>(1e-8)
+                {
+                    state.finished_step = Some(step);
+                    break;
+                }
+
+                if count == sample_rate_steps {
+                    results.runner.push(runner as u32);
+                    results.time_s.push(state.time_elapsed.get::<second>() as f32);
+                    results.velocity_mps.push(state.velocity.get::<meter_per_second>() as f32);
+                    results.energy_jpkg.push(state.energy.get::<joule_per_kilogram>() as f32);
+                    count = 0; // reset the counter
+                }
                 self.step_runner(runner_param, &mut state)?;
                 count += 1;
             }
         }
 
-        if !row_buffer.is_empty() {
-            Self::flush_parquet_rows(self, &mut writer, &mut row_buffer)?;
-        }
-        Self::close_parquet_writer(writer)?;
-
-        // write the runner parameters to a separate parquet file for analysis
-        self.write_runner_params_parquet()?;
-
-        Ok(())
+        Ok(results)
     }
+
+
 
     fn init_runner(
         &mut self,
@@ -328,7 +392,6 @@ impl MonteCarloSimulation {
     }
 
     fn flush_parquet_rows(
-        &self,
         writer: &mut ArrowWriter<File>,
         results: &mut ResultBatch,
         // rows: &mut Vec<ResultRow>,
@@ -382,11 +445,11 @@ fn runner_params_schema() -> Arc<Schema> {
     ]))
 }
 
-fn write_runner_params_parquet(&self) -> Result<(), SimError> {
-    std::fs::create_dir_all(&self.input.config.result_path)
+fn write_runner_params_parquet(&self, path: &str) -> Result<(), SimError> {
+    std::fs::create_dir_all(path)
         .map_err(|_| SimError::InvalidValue("failed to create result directory"))?;
 
-    let out_path = PathBuf::from(&self.input.config.result_path).join("runner_params.parquet");
+    let out_path = PathBuf::from(path).join("runner_params.parquet");
     let file = File::create(&out_path)
         .map_err(|_| SimError::InvalidValue("failed to create runner params parquet"))?;
 
