@@ -1,50 +1,28 @@
 """Use this script to fit the model parameters to the data."""
 
 import json
+from io import BytesIO
+from logging import Logger
 from pathlib import Path
 
 import numpy as np
 import optuna
 import pandas as pd
+import stride_sim_rust
+from google.cloud import storage
 from scipy import signal
-from scipy.signal import butter, filtfilt
 
-from src.simulation.data_classes import SimConfig
 from src.simulation.monte_carlo_simulation import MonteCarloSimulation
+from src.utilis.logger import StrideSimLogger
 
 
 class ModelFitter:
     """Use class to fit the model parameters to the data."""
 
-    def __init__(self, parquet_path: str, json_path: str) -> None:
-        """Initialize the model fitter with the paths to the csv and json data."""
-        self.parquet_path = parquet_path
-        self.json_path = json_path
-
-        df = pd.read_parquet(parquet_path, engine="pyarrow")
-        # expected: time (s), distance (m), velocity (m/s)
-        df["time_datetime"] = pd.to_datetime(df["time_datetime"])
-        t_obs = (df["time_datetime"] - df["time_datetime"].iloc[0]).dt.total_seconds().to_numpy()
-        d_obs = df["distance_m"].to_numpy()
-        v_obs = df["smooth_velocity_mps"].to_numpy()
-        grade = df["grade_percent"].to_numpy()
-        headwind = df["headwind_mps"].to_numpy()
-
-        json_path = Path(json_path)
-        content = json_path.read_text()
-        overall_data = json.loads(content)
-
-        self.run_data = {
-            "time": t_obs,
-            "distance": d_obs,
-            "velocity": v_obs,
-            "grade": grade,
-            "headwind": headwind,
-            "total_distance": overall_data["distance"],
-            "temperature": overall_data["weather"]["temp"],
-            "humidity": overall_data["weather"]["humidity"],
-            "solarradiation": overall_data["weather"]["solarradiation"],
-        }
+    def __init__(self, logger: Logger, run_data: dict) -> None:
+        """Initialize the model fitter with the run data."""
+        self.run_data = run_data
+        self.logger = logger
 
         # get the actual velocity and time arrays from the run data and make it into a pandas dataframe
         v_obs = self.run_data["velocity"]
@@ -54,40 +32,55 @@ class ModelFitter:
             "velocity": v_obs,
         })
 
-    def run_simulation(self, params: dict) -> pd.DataFrame:
-        """Run the simulation with the given parameters and return the simulated velocity and time as a dataframe."""
-        sim_cfg = SimConfig(
+        self.config = stride_sim_rust.SimulationConfig(
             target_dist=self.run_data["total_distance"],
             num_sim=1,
             dt=0.1,
-            max_steps=20000,
-            const_v=params["const_v"],
-            pacing=params["pacing"],
+            max_steps=200_000,
+            sample_rate=1.0,  # sample every 1 seconds
+            result_path=None,
         )
 
-        # create input dataframe
-        df_input = pd.DataFrame({
-            "f_max": [params["f_max"]],
-            "e_init": [params["e_init"]],
-            "tau": [params["tau"]],
-            "sigma": [params["sigma"]],
-            "gamma": [params["gamma"]],
-            "drag_coefficient": [params["drag_coefficient"]],
-            "frontal_area": [params["frontal_area"]],
-            "mass": [params["mass"]],
-            "rho": [params["rho"]],
-            "convection": [params["convection"]],
-            "alpha": [params["alpha"]],
-            "psi": [params["psi"]],
-        })
+        self.weather = stride_sim_rust.Weather(
+            temperature=self.run_data["temperature"],
+            humidity=self.run_data["humidity"],
+            solar_radiation=self.run_data["solar_radiation"],
+        )
+
+        self.course = stride_sim_rust.CourseProfile(
+            distance=self.run_data["distance"],
+            grade=self.run_data["grade"],
+            headwind=self.run_data["headwind"],
+        )
+
+    def run_simulation(self, params: dict) -> pd.DataFrame:
+        """Run the simulation with the given parameters and return the simulated velocity and time as a dataframe."""
+        runners = [stride_sim_rust.RunnerParams(
+            runner_id=0,
+            f_max=params["f_max"],
+            e_init=params["e_init"],
+            tau=params["tau"],
+            sigma=params["sigma"],
+            gamma=params["gamma"],
+            drag_coefficient=params["drag_coefficient"],
+            frontal_area=params["frontal_area"],
+            mass=params["mass"],
+            rho=params["rho"],
+            convection=params["convection"],
+            alpha=params["alpha"],
+            psi=params["psi"],
+            const_v=params["const_v"],
+            pacing=params["pacing"],
+        )]
 
         # run simulation
-        sim = MonteCarloSimulation(sim_cfg, df_input=df_input, parquet_data=self.parquet_path, json_data=self.json_path)
-        sim.run()
+        sim = MonteCarloSimulation(self.logger, runners, self.config, self.weather, self.course)
+        sim_results = sim.run_collect()
 
         # get the velocity and time arrays from the simulation and make it into a pandas dataframe
-        v_sim = sim.velocity[:, 0]
-        t_sim = sim.time_elapsed
+        v_sim = sim_results[2]  # velocity
+        t_sim = sim_results[1]  # time
+
         return pd.DataFrame({
             "time": t_sim,
             "velocity": v_sim,
@@ -138,26 +131,6 @@ class ModelFitter:
         return np.mean((df_sim_masked["velocity"] - self.df_obs["velocity"]) ** 2)
 
 
-def generate_realistic_noise(length: int, target_rmse: float, cutoff_hz: float = 0.1, fs: float = 1.0, seed: int = 42) -> np.ndarray:
-    """Use to generate realistic noise that can be added to the simulation output to better match the observed data."""
-    # generate raw Gaussian noise
-    rng = np.random.default_rng(seed)
-    raw_noise = rng.normal(0, 1, length)
-
-    # design a Low-Pass Butterworth Filter
-    # nyquist frequency is half the sampling rate
-    nyq = 0.5 * fs
-    normal_cutoff = cutoff_hz / nyq
-    b, a = butter(N=2, Wn=normal_cutoff, btype="low", analog=False)
-
-    # apply the filter (filtfilt prevents phase shift/delay)
-    smooth_noise = filtfilt(b, a, raw_noise)
-
-    # scale it to match the Optuna Error
-    # scale by the ratio of target_rmse to the current std of the smooth signal
-    current_std = np.std(smooth_noise)
-    return smooth_noise * (target_rmse / current_std)
-
 def automatic_cutoff(velocity_residuals: pd.Series, fs: float = 1.0, threshold: float = 0.90) -> float:
     """Use to automatically determine the cutoff frequency."""
     # compute PSD
@@ -171,18 +144,94 @@ def automatic_cutoff(velocity_residuals: pd.Series, fs: float = 1.0, threshold: 
     cutoff_idx = np.where(cumulative_psd >= total_power * threshold)[0][0]
     return freqs[cutoff_idx]
 
-def model_fitting(date: str, bucket_name: str, train_folder: str = "02_trainings") -> None:
+def read_run_data(logger: Logger, logger_mgr: StrideSimLogger, date: str, parquet_path: str, json_path: str) -> dict:
+    """Use to read the run data from the given paths."""
+    # get the bucket name from the logger manager
+    bucket_name = logger_mgr.bucket_name
+    runs_folder = logger_mgr.folder_name.split("/")[0]
+
+    # first determine where the data is stored based on the execution environment
+    if logger_mgr.execution_env == "local":
+        logger.info(f"Reading run data from local file system at: {parquet_path} and {json_path}")
+        df = pd.read_parquet(parquet_path, engine="pyarrow")
+        json_content = Path(json_path).read_text()
+        overall_data = json.loads(json_content)
+    elif logger_mgr.execution_env == "gcp":
+        logger.info(f"Reading run data from GCP bucket at: {parquet_path} and {json_path}")
+
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+
+        parquet_blob_path = f"{runs_folder}/{date}/streams.parquet"
+        json_blob_path = f"{runs_folder}/{date}/overall.json"
+
+        parquet_blob = bucket.blob(parquet_blob_path)
+        json_blob = bucket.blob(json_blob_path)
+
+        if not parquet_blob.exists():
+            error = f"GCS object not found: gs://{bucket_name}/{parquet_blob_path}"
+            logger.error(error)
+            raise FileNotFoundError(error)
+        if not json_blob.exists():
+            error = f"GCS object not found: gs://{bucket_name}/{json_blob_path}"
+            logger.error(error)
+            raise FileNotFoundError(error)
+
+        parquet_bytes = parquet_blob.download_as_bytes()
+        df = pd.read_parquet(BytesIO(parquet_bytes), engine="pyarrow")
+
+        overall_data = json.loads(json_blob.download_as_text())
+    else:
+        error = f"Unknown execution environment: {logger_mgr.execution_env}. Cannot read run data."
+        logger.error(error)
+        raise ValueError(error)
+
+    # create a dictionary to hold the run data and return it
+    # expected: time (s), distance (m), velocity (m/s)
+    # remove the first row of the dataframe since it is always 0 and can cause issues with the fitting
+    df = df.iloc[1:].copy()
+    df["time_datetime"] = pd.to_datetime(df["time_datetime"])
+    t_obs = (df["time_datetime"] - df["time_datetime"].iloc[0]).dt.total_seconds().to_numpy()
+    d_obs = df["distance_m"].to_numpy()
+    v_obs = df["smooth_velocity_mps"].to_numpy()
+    grade = df["grade_percent"].to_numpy()
+    headwind = df["headwind_mps"].to_numpy()
+
+    json_path = Path(json_path)
+    content = json_path.read_text()
+    overall_data = json.loads(content)
+
+    return {
+        "time": t_obs,
+        "distance": d_obs,
+        "velocity": v_obs,
+        "grade": grade,
+        "headwind": headwind,
+        "total_distance": overall_data["distance"],
+        "temperature": overall_data["weather"]["temp"],
+        "humidity": overall_data["weather"]["humidity"],
+        "solar_radiation": overall_data["weather"]["solarradiation"],
+    }
+
+
+def model_fitting(logger: Logger, logger_mgr: StrideSimLogger, date: str) -> None:
     """Use to fit the model parameters to the data."""
-    # determine which run to use for fitting the model parameters
+    # get the bucket name from the logger manager
+    bucket_name = logger_mgr.bucket_name
+    train_folder = logger_mgr.folder_name.split("/")[0]
+
     parquet_data = f"{bucket_name}/01_runs/{date}/streams.parquet"
     json_data = f"{bucket_name}/01_runs/{date}/overall.json"
 
+    # read the observed data
+    run_data = read_run_data(logger, logger_mgr, date, parquet_data, json_data)
+
     # create the model fitter class
-    fitter = ModelFitter(parquet_path = parquet_data, json_path = json_data)
+    fitter = ModelFitter(logger, run_data)
 
     # create a study object
     study = optuna.create_study(direction="minimize")
-    study.optimize(fitter.objective_function, n_trials=50)
+    study.optimize(fitter.objective_function, n_trials=100, show_progress_bar=False)
 
     # put this in a json file
     data = study.best_params
@@ -199,15 +248,34 @@ def model_fitting(date: str, bucket_name: str, train_folder: str = "02_trainings
     velocity_residuals = fitter.df_obs["velocity"] - df_sim_masked["velocity"]
     cutoff_freq = automatic_cutoff(velocity_residuals)
 
+    # lastly add the run date and cutoff frequency
     data["noise_cutoff_freq"] = cutoff_freq
-
-    # lastly add the run date to know which run these parameters correspond to
     data["run_date"] = date
 
-    # delete the model_coefficients.json if it exists
-    output_folder_path = Path(f"{bucket_name}/{train_folder}/{date}")
-    output_folder_path.mkdir(parents=True, exist_ok=True)
-    file = output_folder_path / "model_coefficients.json"
+    # save the model coefficients to a json file in the output folder
+    output_blob_path = f"{train_folder}/{date}/model_coefficients.json"
 
-    file.write_text(json.dumps(data, indent=4))
+
+    if logger_mgr.execution_env == "local":
+        output_folder_path = Path(f"{bucket_name}/{train_folder}/{date}")
+        output_folder_path.mkdir(parents=True, exist_ok=True)
+        file = output_folder_path / "model_coefficients.json"
+        file.write_text(json.dumps(data, indent=4))
+        logger.info(f"Model coefficients saved locally at: {file}")
+
+    elif logger_mgr.execution_env == "gcp":
+        logger.info(f"Saving model coefficients to GCP: gs://{bucket_name}/{output_blob_path}")
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(output_blob_path)
+        blob.upload_from_string(
+            json.dumps(data, indent=4),
+            content_type="application/json",
+        )
+        logger.info("Model coefficients saved to GCP.")
+    else:
+        error = f"Unknown execution environment: {logger_mgr.execution_env}. Cannot save model coefficients."
+        logger.error(error)
+        raise ValueError(error)
+
 

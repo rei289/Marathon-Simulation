@@ -60,6 +60,10 @@ class MonteCarloSimulation:
         """Use to run the simulation."""
         stride_sim_rust.run_simulation(self.cfg, self.weather, self.course, self.runner_params)
 
+    def run_collect(self) -> list[list[float]]:
+        """Use to run the simulation and collect results in memory instead of writing to parquet."""
+        return stride_sim_rust.run_simulation_collect(self.cfg, self.weather, self.course, self.runner_params)
+
     def save_to_cloud_results(self, bucket_name: str, simulation_folder: str, job_id: str, ts: str) -> None:
         """Use to save the results metadata, and configuration of the simulation."""
         # create a unique job id and base path for storing results in the bucket

@@ -4,7 +4,7 @@ pub mod param_config;
 use monte_carlo_simulation::{
 	CourseProfile as CoreCourseProfile, MonteCarloSimulation, PacingStrategy,
 	RunnerParams as CoreRunnerParams, SimulationConfig as CoreSimulationConfig, SimulationInput,
-	Weather as CoreWeather,
+	Weather as CoreWeather
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -39,14 +39,14 @@ struct SimulationConfig {
 	#[pyo3(get, set)]
 	sample_rate: f64,
 	#[pyo3(get, set)]
-	result_path: String,
+	result_path: Option<String>,
 }
 
 #[pymethods]
 impl SimulationConfig {
 	#[new]
 	#[pyo3(signature = (target_dist, num_sim, dt, max_steps, sample_rate, result_path))]
-	fn new(target_dist: f64, num_sim: usize, dt: f64, max_steps: usize, sample_rate: f64, result_path: String) -> Self {
+	fn new(target_dist: f64, num_sim: usize, dt: f64, max_steps: usize, sample_rate: f64, result_path: Option<String>) -> Self {
 		Self {
 			target_dist,
 			num_sim,
@@ -323,6 +323,37 @@ fn run_simulation(
 	Ok(())
 }
 
+#[pyfunction]
+fn run_simulation_collect(
+	_py: Python<'_>,
+	config: PyRef<'_, SimulationConfig>,
+	weather: PyRef<'_, Weather>,
+	course: PyRef<'_, CourseProfile>,
+	runners: &Bound<'_, PyList>,
+) -> PyResult<(Vec<u32>, Vec<f32>, Vec<f32>, Vec<f32>)> {
+		let mut core_runners = Vec::with_capacity(runners.len());
+	for item in runners.iter() {
+		let runner: PyRef<'_, RunnerParams> = item.extract()?;
+		core_runners.push(runner.to_core()?);
+	}
+
+	let input = SimulationInput {
+		config: config.to_core(),
+		weather: weather.to_core(),
+		course: course.to_core(),
+		runners: core_runners,
+	};
+
+	let mut sim = MonteCarloSimulation::new(input)
+		.map_err(|err| PyValueError::new_err(format!("init error: {:?}", err)))?;
+
+	let results = sim
+		.simulate_collect()
+		.map_err(|err| PyValueError::new_err(format!("simulate error: {:?}", err)))?;
+
+	Ok((results.runner, results.time_s, results.velocity_mps, results.energy_jpkg))
+}
+
 #[pymodule]
 fn stride_sim_rust(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 	m.add_class::<SimulationConfig>()?;
@@ -331,5 +362,6 @@ fn stride_sim_rust(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 	m.add_class::<RunnerParams>()?;
 	m.add_function(wrap_pyfunction!(module_info, m)?)?;
 	m.add_function(wrap_pyfunction!(run_simulation, m)?)?;
+	m.add_function(wrap_pyfunction!(run_simulation_collect, m)?)?;
 	Ok(())
 }

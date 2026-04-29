@@ -43,7 +43,7 @@ pub struct SimulationConfig {
     pub dt: Time,                       // time step for the simulation (e.g. 0.1 means simulate every 0.1 seconds)
     pub max_steps: usize,               // maximum number of steps to simulate for each runner (to prevent infinite loops if they can't finish)
     pub sample_rate: Time,              // time in seconds to simulate before writing to parquet (e.g. 100 means write every 100 seconds)
-    pub result_path: String,            // path to save results (e.g. parquet file)
+    pub result_path: Option<String>,    // path to save results (e.g. parquet file)
 }
 
 #[derive(Clone, Debug)]
@@ -117,6 +117,11 @@ pub enum SimError {
 
 pub struct MonteCarloSimulation {
     input: SimulationInput,
+}
+
+struct CourseIndex {
+    grade_index: usize,
+    headwind_index: usize,
 }
 
 impl RunnerState {
@@ -212,19 +217,27 @@ impl MonteCarloSimulation {
         let tmax = self.input.config.max_steps;
 
         // initialize parquet writer and row buffer for writing results in batches
-
-        let mut writer = Self::make_parquet_writer(&self.input.config.result_path)?;
+        let mut writer = match self.input.config.result_path.as_deref() {
+            Some(path) => Some(Self::make_parquet_writer(path)?),
+            None => None,
+        };
         let mut row_buffer = ResultBatch::new();
 
-        let mut count = 0;
         let sample_rate_steps = (self.input.config.sample_rate.get::<second>() / self.input.config.dt.get::<second>()).round() as usize;
-
+        
         // initialize state for each runner and perform the simulation
         for runner in 0..n {
             // calculate the new input parameters for this runner based on the weather conditions and their individual psi parameters, then perform the simulation for this runner until they finish or reach max steps
             self.init_runner(runner)?;
             let runner_param = &self.input.runners[runner];
 
+            // keep indices across timesteps so nearest-point search is incremental.
+            let mut course_index = CourseIndex {
+                grade_index: 0,
+                headwind_index: 0,
+            };
+            
+            let mut count = 0;
             // initialize the state for this runner
             let mut state = RunnerState::new(runner_param);
 
@@ -243,8 +256,9 @@ impl MonteCarloSimulation {
                     break;
                 }
                 
+                // if we have a parquet writer, write the current state to the row buffer at the specified sample rate
+                if writer.is_some() && count == sample_rate_steps {
                 // determine if we should write to parquet based on sample_rate
-                if count == sample_rate_steps {
                     row_buffer.runner.push(runner as u32);
                     row_buffer.time_s.push(state.time_elapsed.get::<second>() as f32);
                     row_buffer.velocity_mps.push(state.velocity.get::<meter_per_second>() as f32);
@@ -252,25 +266,92 @@ impl MonteCarloSimulation {
                     count = 0; // reset the counter
                 }
 
-                if row_buffer.len() >= PARQUET_CHUNK_ROWS {
-                    Self::flush_parquet_rows(self, &mut writer, &mut row_buffer)?;
+                if let Some(w) = writer.as_mut() {
+                    if row_buffer.len() >= PARQUET_CHUNK_ROWS {
+                        Self::flush_parquet_rows( w, &mut row_buffer)?;
+                    }
                 }
 
-                self.step_runner(runner_param, &mut state)?;
+                count += 1;
+                self.step_runner(runner_param, &mut state, &mut course_index)?;
+            }
+        }
+
+
+        if let Some(w) = writer.as_mut() {
+            if !row_buffer.is_empty() {
+                Self::flush_parquet_rows( w, &mut row_buffer)?;
+            }
+        }
+
+        if let Some(w) = writer {
+            Self::close_parquet_writer(w)?;
+        }
+
+        if let Some(path) = self.input.config.result_path.as_deref() {
+            self.write_runner_params_parquet(path)?;
+        }
+
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub fn simulate_collect(&mut self) -> Result<ResultBatch, SimError> {
+        /*
+        Use to simulate the monte carlo process and collect results in memory instead of writing to parquet
+         */
+        let n = self.input.config.num_sim;
+        let tmax = self.input.config.max_steps;
+
+        let mut results = ResultBatch::new();
+        let sample_rate_steps = (self.input.config.sample_rate.get::<second>() / self.input.config.dt.get::<second>()).round() as usize;
+
+        // initialize state for each runner and perform the simulation
+        for runner in 0..n {
+            // initialize current index for course profile lookup based on current distance
+            let mut course_index = CourseIndex {
+                grade_index: 0,
+                headwind_index: 0,
+            };
+            // calculate the new input parameters for this runner based on the weather conditions and their individual psi parameters, then perform the simulation for this runner until they finish or reach max steps
+            self.init_runner(runner)?;
+            let runner_param = &self.input.runners[runner];
+
+            // initialize the state for this runner
+            let mut state = RunnerState::new(runner_param);
+
+            let mut count = 0;
+            // perform the simulation for this runner until they finish or reach max steps
+            for step in 0..tmax {
+                // check if runner has finished
+                if state.distance >= self.input.config.target_dist {
+                    state.finished_step = Some(step);
+                    break;
+                }
+
+                if state.velocity <= Velocity::new::<meter_per_second>(1e-8)
+                    && state.energy <= AvailableEnergy::new::<joule_per_kilogram>(1e-8)
+                {
+                    state.finished_step = Some(step);
+                    break;
+                }
+
+                if count == sample_rate_steps {
+                    results.runner.push(runner as u32);
+                    results.time_s.push(state.time_elapsed.get::<second>() as f32);
+                    results.velocity_mps.push(state.velocity.get::<meter_per_second>() as f32);
+                    results.energy_jpkg.push(state.energy.get::<joule_per_kilogram>() as f32);
+                    count = 0; // reset the counter
+                }
+                self.step_runner(runner_param, &mut state, &mut course_index)?;
                 count += 1;
             }
         }
 
-        if !row_buffer.is_empty() {
-            Self::flush_parquet_rows(self, &mut writer, &mut row_buffer)?;
-        }
-        Self::close_parquet_writer(writer)?;
-
-        // write the runner parameters to a separate parquet file for analysis
-        self.write_runner_params_parquet()?;
-
-        Ok(())
+        Ok(results)
     }
+
+
 
     fn init_runner(
         &mut self,
@@ -328,7 +409,6 @@ impl MonteCarloSimulation {
     }
 
     fn flush_parquet_rows(
-        &self,
         writer: &mut ArrowWriter<File>,
         results: &mut ResultBatch,
         // rows: &mut Vec<ResultRow>,
@@ -362,115 +442,116 @@ impl MonteCarloSimulation {
         Ok(())
     }
 
-fn runner_params_schema() -> Arc<Schema> {
-    Arc::new(Schema::new(vec![
-        Field::new("runner_id", DataType::UInt32, false),
-        Field::new("f_max_mps2", DataType::Float32, false),
-        Field::new("e_init_jpkg", DataType::Float32, false),
-        Field::new("tau_s", DataType::Float32, false),
-        Field::new("sigma_wpkg", DataType::Float32, false),
-        Field::new("gamma_hz", DataType::Float32, false),
-        Field::new("drag_coefficient", DataType::Float32, false),
-        Field::new("frontal_area_m2", DataType::Float32, false),
-        Field::new("mass_kg", DataType::Float32, false),
-        Field::new("rho_kgpm3", DataType::Float32, false),
-        Field::new("convection_wpm2k", DataType::Float32, false),
-        Field::new("alpha", DataType::Float32, false),
-        Field::new("psi", DataType::Float32, false),
-        Field::new("const_v_mps", DataType::Float32, false),
-        Field::new("pacing", DataType::Utf8, false),
-    ]))
-}
-
-fn write_runner_params_parquet(&self) -> Result<(), SimError> {
-    std::fs::create_dir_all(&self.input.config.result_path)
-        .map_err(|_| SimError::InvalidValue("failed to create result directory"))?;
-
-    let out_path = PathBuf::from(&self.input.config.result_path).join("runner_params.parquet");
-    let file = File::create(&out_path)
-        .map_err(|_| SimError::InvalidValue("failed to create runner params parquet"))?;
-
-    let mut writer = ArrowWriter::try_new(file, Self::runner_params_schema(), Some(
-        WriterProperties::builder().set_dictionary_enabled(true).build()
-    ))
-    .map_err(|_| SimError::InvalidValue("failed to create runner params writer"))?;
-
-    let mut runner_id = Vec::with_capacity(self.input.runners.len());
-    let mut f_max = Vec::with_capacity(self.input.runners.len());
-    let mut e_init = Vec::with_capacity(self.input.runners.len());
-    let mut tau = Vec::with_capacity(self.input.runners.len());
-    let mut sigma = Vec::with_capacity(self.input.runners.len());
-    let mut gamma = Vec::with_capacity(self.input.runners.len());
-    let mut drag = Vec::with_capacity(self.input.runners.len());
-    let mut area = Vec::with_capacity(self.input.runners.len());
-    let mut mass = Vec::with_capacity(self.input.runners.len());
-    let mut rho = Vec::with_capacity(self.input.runners.len());
-    let mut convection = Vec::with_capacity(self.input.runners.len());
-    let mut alpha = Vec::with_capacity(self.input.runners.len());
-    let mut psi = Vec::with_capacity(self.input.runners.len());
-    let mut const_v = Vec::with_capacity(self.input.runners.len());
-    let mut pacing = Vec::with_capacity(self.input.runners.len());
-
-    for r in &self.input.runners {
-        runner_id.push(r.runner_id);
-        f_max.push(r.f_max.get::<meter_per_second_squared>() as f32);
-        e_init.push(r.e_init.get::<joule_per_kilogram>() as f32);
-        tau.push(r.tau.get::<second>() as f32);
-        sigma.push(r.sigma.get::<watt_per_kilogram>() as f32);
-        gamma.push(r.gamma.get::<hertz>() as f32);
-        drag.push(r.drag_coefficient as f32);
-        area.push(r.frontal_area.get::<uom::si::area::square_meter>() as f32);
-        mass.push(r.mass.get::<uom::si::mass::kilogram>() as f32);
-        rho.push(r.rho.get::<uom::si::mass_density::kilogram_per_cubic_meter>() as f32);
-        convection.push(r.convection.get::<watt_per_square_meter_kelvin>() as f32);
-        alpha.push(r.alpha as f32);
-        psi.push(r.psi as f32);
-        const_v.push(r.const_v.get::<meter_per_second>() as f32);
-        pacing.push(match r.pacing {
-            PacingStrategy::Constant => "constant",
-            PacingStrategy::EvenEffort => "even_effort",
-        });
+    fn runner_params_schema() -> Arc<Schema> {
+        Arc::new(Schema::new(vec![
+            Field::new("runner_id", DataType::UInt32, false),
+            Field::new("f_max_mps2", DataType::Float32, false),
+            Field::new("e_init_jpkg", DataType::Float32, false),
+            Field::new("tau_s", DataType::Float32, false),
+            Field::new("sigma_wpkg", DataType::Float32, false),
+            Field::new("gamma_hz", DataType::Float32, false),
+            Field::new("drag_coefficient", DataType::Float32, false),
+            Field::new("frontal_area_m2", DataType::Float32, false),
+            Field::new("mass_kg", DataType::Float32, false),
+            Field::new("rho_kgpm3", DataType::Float32, false),
+            Field::new("convection_wpm2k", DataType::Float32, false),
+            Field::new("alpha", DataType::Float32, false),
+            Field::new("psi", DataType::Float32, false),
+            Field::new("const_v_mps", DataType::Float32, false),
+            Field::new("pacing", DataType::Utf8, false),
+        ]))
     }
 
-    let batch = RecordBatch::try_new(
-        Self::runner_params_schema(),
-        vec![
-            Arc::new(UInt32Array::from(runner_id)) as ArrayRef,
-            Arc::new(Float32Array::from(f_max)) as ArrayRef,
-            Arc::new(Float32Array::from(e_init)) as ArrayRef,
-            Arc::new(Float32Array::from(tau)) as ArrayRef,
-            Arc::new(Float32Array::from(sigma)) as ArrayRef,
-            Arc::new(Float32Array::from(gamma)) as ArrayRef,
-            Arc::new(Float32Array::from(drag)) as ArrayRef,
-            Arc::new(Float32Array::from(area)) as ArrayRef,
-            Arc::new(Float32Array::from(mass)) as ArrayRef,
-            Arc::new(Float32Array::from(rho)) as ArrayRef,
-            Arc::new(Float32Array::from(convection)) as ArrayRef,
-            Arc::new(Float32Array::from(alpha)) as ArrayRef,
-            Arc::new(Float32Array::from(psi)) as ArrayRef,
-            Arc::new(Float32Array::from(const_v)) as ArrayRef,
-            Arc::new(StringArray::from(pacing)) as ArrayRef,
-        ],
-    )
-    .map_err(|_| SimError::InvalidValue("failed to create runner params batch"))?;
+    fn write_runner_params_parquet(&self, path: &str) -> Result<(), SimError> {
+        std::fs::create_dir_all(path)
+            .map_err(|_| SimError::InvalidValue("failed to create result directory"))?;
 
-    writer.write(&batch)
-        .map_err(|_| SimError::InvalidValue("failed to write runner params batch"))?;
-    writer.close()
-        .map_err(|_| SimError::InvalidValue("failed to close runner params writer"))?;
-    Ok(())
-}
+        let out_path = PathBuf::from(path).join("runner_params.parquet");
+        let file = File::create(&out_path)
+            .map_err(|_| SimError::InvalidValue("failed to create runner params parquet"))?;
+
+        let mut writer = ArrowWriter::try_new(file, Self::runner_params_schema(), Some(
+            WriterProperties::builder().set_dictionary_enabled(true).build()
+        ))
+        .map_err(|_| SimError::InvalidValue("failed to create runner params writer"))?;
+
+        let mut runner_id = Vec::with_capacity(self.input.runners.len());
+        let mut f_max = Vec::with_capacity(self.input.runners.len());
+        let mut e_init = Vec::with_capacity(self.input.runners.len());
+        let mut tau = Vec::with_capacity(self.input.runners.len());
+        let mut sigma = Vec::with_capacity(self.input.runners.len());
+        let mut gamma = Vec::with_capacity(self.input.runners.len());
+        let mut drag = Vec::with_capacity(self.input.runners.len());
+        let mut area = Vec::with_capacity(self.input.runners.len());
+        let mut mass = Vec::with_capacity(self.input.runners.len());
+        let mut rho = Vec::with_capacity(self.input.runners.len());
+        let mut convection = Vec::with_capacity(self.input.runners.len());
+        let mut alpha = Vec::with_capacity(self.input.runners.len());
+        let mut psi = Vec::with_capacity(self.input.runners.len());
+        let mut const_v = Vec::with_capacity(self.input.runners.len());
+        let mut pacing = Vec::with_capacity(self.input.runners.len());
+
+        for r in &self.input.runners {
+            runner_id.push(r.runner_id);
+            f_max.push(r.f_max.get::<meter_per_second_squared>() as f32);
+            e_init.push(r.e_init.get::<joule_per_kilogram>() as f32);
+            tau.push(r.tau.get::<second>() as f32);
+            sigma.push(r.sigma.get::<watt_per_kilogram>() as f32);
+            gamma.push(r.gamma.get::<hertz>() as f32);
+            drag.push(r.drag_coefficient as f32);
+            area.push(r.frontal_area.get::<uom::si::area::square_meter>() as f32);
+            mass.push(r.mass.get::<uom::si::mass::kilogram>() as f32);
+            rho.push(r.rho.get::<uom::si::mass_density::kilogram_per_cubic_meter>() as f32);
+            convection.push(r.convection.get::<watt_per_square_meter_kelvin>() as f32);
+            alpha.push(r.alpha as f32);
+            psi.push(r.psi as f32);
+            const_v.push(r.const_v.get::<meter_per_second>() as f32);
+            pacing.push(match r.pacing {
+                PacingStrategy::Constant => "constant",
+                PacingStrategy::EvenEffort => "even_effort",
+            });
+        }
+
+        let batch = RecordBatch::try_new(
+            Self::runner_params_schema(),
+            vec![
+                Arc::new(UInt32Array::from(runner_id)) as ArrayRef,
+                Arc::new(Float32Array::from(f_max)) as ArrayRef,
+                Arc::new(Float32Array::from(e_init)) as ArrayRef,
+                Arc::new(Float32Array::from(tau)) as ArrayRef,
+                Arc::new(Float32Array::from(sigma)) as ArrayRef,
+                Arc::new(Float32Array::from(gamma)) as ArrayRef,
+                Arc::new(Float32Array::from(drag)) as ArrayRef,
+                Arc::new(Float32Array::from(area)) as ArrayRef,
+                Arc::new(Float32Array::from(mass)) as ArrayRef,
+                Arc::new(Float32Array::from(rho)) as ArrayRef,
+                Arc::new(Float32Array::from(convection)) as ArrayRef,
+                Arc::new(Float32Array::from(alpha)) as ArrayRef,
+                Arc::new(Float32Array::from(psi)) as ArrayRef,
+                Arc::new(Float32Array::from(const_v)) as ArrayRef,
+                Arc::new(StringArray::from(pacing)) as ArrayRef,
+            ],
+        )
+        .map_err(|_| SimError::InvalidValue("failed to create runner params batch"))?;
+
+        writer.write(&batch)
+            .map_err(|_| SimError::InvalidValue("failed to write runner params batch"))?;
+        writer.close()
+            .map_err(|_| SimError::InvalidValue("failed to close runner params writer"))?;
+        Ok(())
+    }
 
 
-    fn step_runner(&self, runner_params: &RunnerParams, state: &mut RunnerState) -> Result<(), SimError> {
+    fn step_runner(&self, runner_params: &RunnerParams, state: &mut RunnerState, course_index: &mut CourseIndex) -> Result<(), SimError> {
         /*
         Use to perform one time step update for a given runner, calculating its current location and all the physics
          */
         let dt = self.input.config.dt;
 
-        // determine the grade and headwind at the runner's current distance
-        let grade = self.get_grade(state.distance)?;
-        let headwind = self.get_headwind(state.distance)?;
+        let (grade, headwind) = self.lookup_course_conditions(state.distance, &mut course_index.grade_index, &mut course_index.headwind_index)?;
+        
+        // let grade = self.get_grade(state.distance, &mut course_index.grade_index)?;
+        // let headwind = self.get_headwind(state.distance, &mut course_index.headwind_index)?;
 
         // determine the desired acceleration based on the pacing strategy and current state
         let f_desired = match runner_params.pacing {
@@ -548,45 +629,59 @@ fn write_runner_params_parquet(&self) -> Result<(), SimError> {
         Ok(())
     }
 
-    fn get_grade(&self, distance: Length) -> Result<f64, SimError> {
+    fn get_grade(&self, distance: Length, course_index: &mut usize) -> Result<f64, SimError> {
         /*
         Helper function to get the grade at a given distance based on the course profile.
          */
         let course = &self.input.course;
-        let closest_index = course.distance
-        .iter()
-        .enumerate() // Gives us (index, &value)
-        .min_by(|(_, a), (_, b)| {
-            let diff_a = (**a - distance).abs().get::<meter>();
-            let diff_b = (**b - distance).abs().get::<meter>();
-            diff_a.partial_cmp(&diff_b).unwrap()
-        })
-        .map(|(index, _)| index)
-        .ok_or(SimError::EmptyCourse("course distance_m must be non-empty"))?;
+        let mut current_diff = (distance - course.distance[*course_index]).abs().get::<meter>();
+        for i in (*course_index + 1)..course.distance.len() {
+            // get the absolute difference between the current distance and the course distance at index i
+            let diff = (distance - course.distance[i]).abs().get::<meter>();
+            if diff < current_diff {
+                current_diff = diff;
+                *course_index = i;
+            } else {
+                break; // since the course distance is sorted, we can break once the difference starts increasing
+            }
+        }
         
         // convert grade from percent to angle (radians) for physics calculations
-        let decimal_grade = course.grade[closest_index] / 100.0;
+        let decimal_grade: f64 = course.grade[*course_index] / 100.0;
         
         Ok(decimal_grade.atan())
     }
 
-    fn get_headwind(&self, distance: Length) -> Result<Velocity, SimError> {
+    fn get_headwind(&self, distance: Length, headwind_index: &mut usize) -> Result<Velocity, SimError> {
         /*
         Helper function to get the headwind at a given distance based on the course profile.
          */
         let course = &self.input.course;
-        let closest_index = course.distance
-        .iter()
-        .enumerate() // Gives us (index, &value)
-        .min_by(|(_, a), (_, b)| {
-            let diff_a = (**a - distance).abs().get::<meter>();
-            let diff_b = (**b - distance).abs().get::<meter>();
-            diff_a.partial_cmp(&diff_b).unwrap()
-        })
-        .map(|(index, _)| index)
-        .ok_or(SimError::EmptyCourse("course distance_m must be non-empty"))?;
+        let mut current_diff = (distance - course.distance[*headwind_index]).abs().get::<meter>();
 
-        Ok(course.headwind[closest_index])
+        for i in (*headwind_index + 1)..course.distance.len() {
+            // get the absolute difference between the current distance and the course distance at index i
+            let diff = (distance - course.distance[i]).abs().get::<meter>();
+            if diff < current_diff {
+                current_diff = diff;
+                *headwind_index = i;
+            } else {
+                break; // since the course distance is sorted, we can break once the difference starts increasing
+            }
+        }
+
+        Ok(course.headwind[*headwind_index])
+    }
+
+    pub fn lookup_course_conditions(
+        &self,
+        distance: Length,
+        grade_index: &mut usize,
+        headwind_index: &mut usize,
+    ) -> Result<(f64, Velocity), SimError> {
+        let grade = self.get_grade(distance, grade_index)?;
+        let headwind = self.get_headwind(distance, headwind_index)?;
+        Ok((grade, headwind))
     }
 
     fn get_wbgt(&self, runner: &RunnerParams) -> Result<ThermodynamicTemperature, SimError> {
