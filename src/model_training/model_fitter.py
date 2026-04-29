@@ -148,7 +148,6 @@ def read_run_data(logger: Logger, logger_mgr: StrideSimLogger, date: str, parque
     """Use to read the run data from the given paths."""
     # get the bucket name from the logger manager
     bucket_name = logger_mgr.bucket_name
-    runs_folder = logger_mgr.folder_name.split("/")[0]
 
     # first determine where the data is stored based on the execution environment
     if logger_mgr.execution_env == "local":
@@ -162,8 +161,8 @@ def read_run_data(logger: Logger, logger_mgr: StrideSimLogger, date: str, parque
         client = storage.Client()
         bucket = client.bucket(bucket_name)
 
-        parquet_blob_path = f"{runs_folder}/{date}/streams.parquet"
-        json_blob_path = f"{runs_folder}/{date}/overall.json"
+        parquet_blob_path = f"01_runs/{date}/streams.parquet"
+        json_blob_path = f"01_runs/{date}/overall.json"
 
         parquet_blob = bucket.blob(parquet_blob_path)
         json_blob = bucket.blob(json_blob_path)
