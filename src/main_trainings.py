@@ -20,7 +20,7 @@ if __name__ == "__main__":
     date = "2026-04-06_13-50"
 
     # determine execution environment
-    execution_env = os.getenv("EXECUTION_ENV", "unknown")
+    execution_env = os.getenv("EXECUTION_ENV", "local")
 
     if execution_env == "local":
         # save results to local file system
@@ -30,6 +30,19 @@ if __name__ == "__main__":
         logger_mgr = StrideSimLogger(execution_env=execution_env, bucket_name=bucket_name, folder_name=f"{folder_name}/logs/{jid}")
         logger = logger_mgr.setup_logger()
         logger.info("Running in local environment")
+
+    elif execution_env == "gcp":
+        # get bucket name from environment variable
+        bucket_name = os.getenv("BUCKET_NAME")
+
+        logger_mgr = StrideSimLogger(execution_env=execution_env, bucket_name=bucket_name, folder_name=f"{folder_name}/logs/{jid}")
+        logger = logger_mgr.setup_logger()
+        if not bucket_name:
+            error = "The BUCKET_NAME environment variable is not set!"
+            logger.error(error)
+            raise ValueError(error)
+
+        logger.info("Running in GCP environment")
 
     else:
         logger_mgr = StrideSimLogger(execution_env=execution_env, bucket_name=None, folder_name=f"{folder_name}/{jid}")
@@ -42,7 +55,7 @@ if __name__ == "__main__":
         start_time = time.perf_counter()
         logger.info("Starting Model Fitting...")
 
-        model_fitting(logger, date, bucket_name, train_folder=folder_name)
+        model_fitting(logger, logger_mgr, date)
 
         end_time = time.perf_counter()
         elapsed_time = end_time - start_time
@@ -52,6 +65,10 @@ if __name__ == "__main__":
         error = f"Model Fitting failed with error: {e}"
         logger.exception(error)
     finally:
+        if execution_env == "gcp":
+            logger.info("Moving logs from local /tmp folder to GCP bucket for easier access...")
+            log_blob_path = logger_mgr.upload_log_to_gcs(bucket_name)
+            logger.info(f"Logs uploaded to GCP at: {log_blob_path}")
         logger.info("Closing logger...")
         logger_mgr.close_logger(logger)
 

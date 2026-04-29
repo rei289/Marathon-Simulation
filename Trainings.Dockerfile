@@ -50,5 +50,10 @@ RUN pip install --no-cache-dir -r requirements-train.txt
 
 # copy the rest of the project files
 COPY . .
+# # selective copy only runtime code/data
+# COPY src/ src/
+# COPY config/ config/
+# COPY rust_sim/Cargo.toml rust_sim/Cargo.toml
+# COPY rust_sim/src/ rust_sim/src/
 
 CMD ["python", "-m", "src.main_trainings"]

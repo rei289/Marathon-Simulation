@@ -263,3 +263,98 @@ fn invalid_simulation_inputs_are_rejected() {
     let sim_result = MonteCarloSimulation::new(input.clone());
     assert!(sim_result.is_err());
 }
+
+// test that the get_grade function properly finds the correct grade for a given distance
+#[test]
+fn get_grade_and_headwind_use_closest_distance_and_advance_indices() {
+    let input = SimulationInput {
+        config: SimulationConfig {
+            target_dist: Length::new::<meter>(1000.0),
+            num_sim: 1,
+            dt: Time::new::<second>(1.0),
+            max_steps: 2000,
+            sample_rate: Time::new::<second>(5.0),
+            result_path: None,
+        },
+        weather: Weather {
+            temperature: ThermodynamicTemperature::new::<degree_celsius>(20.0),
+            humidity: 50.0,
+            solar_radiation: HeatFluxDensity::new::<watt_per_square_meter>(700.0),
+        },
+        course: CourseProfile {
+            distance: vec![
+                Length::new::<meter>(0.0),
+                Length::new::<meter>(100.0),
+                Length::new::<meter>(200.0),
+                Length::new::<meter>(300.0),
+            ],
+            grade: vec![0.0, 4.0, -3.0, 2.0],
+            headwind: vec![
+                Velocity::new::<meter_per_second>(0.2),
+                Velocity::new::<meter_per_second>(1.0),
+                Velocity::new::<meter_per_second>(2.0),
+                Velocity::new::<meter_per_second>(3.0),
+            ],
+        },
+        runners: vec![RunnerParams {
+            runner_id: 1 as u32,
+            f_max: Acceleration::new::<meter_per_second_squared>(3.0),
+            e_init: AvailableEnergy::new::<joule_per_kilogram>(5000.0),
+            tau: Time::new::<second>(5.0),
+            sigma: SpecificPower::new::<watt_per_kilogram>(5.0),
+            k: Frequency::new::<hertz>(0.1),
+            gamma: Frequency::new::<hertz>(0.1),
+            drag_coefficient: 1.0,
+            frontal_area: Area::new::<square_meter>(0.5),
+            mass: Mass::new::<kilogram>(70.0),
+            rho: MassDensity::new::<kilogram_per_cubic_meter>(1.225),
+            convection: HeatTransfer::new::<watt_per_square_meter_kelvin>(10.0),
+            alpha: 0.5,
+            psi: 0.01,
+            const_v: Velocity::new::<meter_per_second>(3.5),
+            const_f: Acceleration::new::<meter_per_second_squared>(0.0),
+            pacing: PacingStrategy::Constant,
+        }],
+    };
+
+    let sim = MonteCarloSimulation::new(input).expect("init failed");
+
+    let mut grade_index = 0usize;
+    let mut headwind_index = 0usize;
+
+    let (theta_120, wind_120) = sim
+        .lookup_course_conditions(
+            Length::new::<meter>(120.0),
+            &mut grade_index,
+            &mut headwind_index,
+        )
+        .expect("lookup at 120m failed");
+    assert_eq!(grade_index, 1);
+    assert_eq!(headwind_index, 1);
+    assert!((theta_120 - (0.04f64).atan()).abs() < 1e-12);
+    assert!((wind_120.get::<meter_per_second>() - 1.0).abs() < 1e-12);
+
+    let (theta_190, wind_190) = sim
+        .lookup_course_conditions(
+            Length::new::<meter>(190.0),
+            &mut grade_index,
+            &mut headwind_index,
+        )
+        .expect("lookup at 190m failed");
+    assert_eq!(grade_index, 2);
+    assert_eq!(headwind_index, 2);
+    assert!((theta_190 - (-0.03f64).atan()).abs() < 1e-12);
+    assert!((wind_190.get::<meter_per_second>() - 2.0).abs() < 1e-12);
+
+    let (theta_290, wind_290) = sim
+        .lookup_course_conditions(
+            Length::new::<meter>(290.0),
+            &mut grade_index,
+            &mut headwind_index,
+        )
+        .expect("lookup at 290m failed");
+    assert_eq!(grade_index, 3);
+    assert_eq!(headwind_index, 3);
+    assert!((theta_290 - (0.02f64).atan()).abs() < 1e-12);
+    assert!((wind_290.get::<meter_per_second>() - 3.0).abs() < 1e-12);
+}
