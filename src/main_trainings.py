@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
 
     # determine which run to use for fitting the model parameters
-    date = "2026-04-06_13-50"
+    date = "2026-04-15_19-56"
 
     # determine execution environment
     execution_env = os.getenv("EXECUTION_ENV", "local")
