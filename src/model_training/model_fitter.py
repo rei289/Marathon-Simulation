@@ -196,10 +196,6 @@ def read_run_data(logger: Logger, logger_mgr: StrideSimLogger, date: str, parque
     grade = df["grade_percent"].to_numpy()
     headwind = df["headwind_mps"].to_numpy()
 
-    json_path = Path(json_path)
-    content = json_path.read_text()
-    overall_data = json.loads(content)
-
     return {
         "time": t_obs,
         "distance": d_obs,

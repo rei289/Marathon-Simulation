@@ -600,7 +600,7 @@ impl MonteCarloSimulation {
         };
 
         // calculate the change in velocity and energy based on the actual force applied
-        let dv = f_desired - f_resistance - (1.0/tau) * current_v;
+        let dv = f_final - f_resistance - (1.0/tau) * current_v;
 
         let de = if current_e > AvailableEnergy::new::<joule_per_kilogram>(0.0) {
             sigma - (f_final + f_resistance)*current_v - (k*current_v*current_v*current_t)/tau
