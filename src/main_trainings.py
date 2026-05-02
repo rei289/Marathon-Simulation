@@ -136,17 +136,18 @@ def combine_training_results(logger: logging.Logger, logger_mgr: StrideSimLogger
             error = f"No individual training result files found in GCP bucket {bucket_name} with prefix {prefix} to combine."
             logger.error(error)
             raise FileNotFoundError(error)
+        logger.info(f"Found the following individual training result files to combine: {[blob.name for blob in parameter_blobs]}")
 
         buffer = io.BytesIO()
         bucket = client.bucket(bucket_name)
-        blob = bucket.blob(f"{train_folder}/runner_parameters.parquet")
+        blob_parameter = bucket.blob(f"{train_folder}/runner_parameters.parquet")
         data_list = []
         for blob in parameter_blobs:
             content = blob.download_as_text()
             data_list.append(json.loads(content))
         pd.DataFrame(data_list).to_parquet(buffer, index=False, engine="pyarrow")
         buffer.seek(0)
-        blob.upload_from_file(buffer, content_type="application/octet-stream")
+        blob_parameter.upload_from_file(buffer, content_type="application/octet-stream")
         logger.info("All model coefficients saved to GCP.")
 
     else:
