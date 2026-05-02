@@ -1,8 +1,8 @@
 """Use this script to fit the model parameters to the data."""
 import io
+import json
 import logging
 import os
-import json
 import time
 from pathlib import Path
 
