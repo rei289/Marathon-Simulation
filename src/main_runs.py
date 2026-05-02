@@ -15,7 +15,7 @@ if __name__ == "__main__":
     folder_name = "01_runs"
 
     # determine execution environment
-    execution_env = os.getenv("EXECUTION_ENV", "unknown")
+    execution_env = os.getenv("EXECUTION_ENV", "local")
 
     if execution_env == "local":
         # load configuration from .env file

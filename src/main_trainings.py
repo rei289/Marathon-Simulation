@@ -1,9 +1,12 @@
 """Use this script to fit the model parameters to the data."""
+import io
 import logging
 import os
+import json
 import time
 from pathlib import Path
 
+import pandas as pd
 from dotenv import load_dotenv
 from google.cloud import storage
 
@@ -97,6 +100,57 @@ def fit_latest_runs(logger: logging.Logger, logger_mgr: StrideSimLogger, executi
     logger.info(f"Model Fitting completed in {elapsed_time:.2f} seconds.")
     logger.info("Model Fitting completed successfully.")
 
+def combine_training_results(logger: logging.Logger, logger_mgr: StrideSimLogger, execution_env: str) -> None:
+    """Combine individual training results into one summary parquet file."""
+    bucket_name = logger_mgr.bucket_name
+    train_folder = logger_mgr.folder_name.split("/")[0]
+    if execution_env == "local" and bucket_name:
+        # combine results from local file system
+        local_results_path = Path(bucket_name) / train_folder
+        if not local_results_path.exists():
+            error = f"No training results found at {local_results_path} to combine."
+            logger.error(error)
+            raise FileNotFoundError(error)
+
+        # get all individual training result files
+        parameter_files = list(local_results_path.glob("*.json"))
+        if not parameter_files:
+            error = f"No individual training result files found in {local_results_path} to combine."
+            logger.error(error)
+            raise FileNotFoundError(error)
+        logger.info(f"Found the following individual training result files to combine: {[f.name for f in parameter_files]}")
+
+        # combine the results into a single parquet file
+        combined_results_path = local_results_path / "runner_parameters.parquet"
+        data_list = [json.loads(f.read_text()) for f in parameter_files]
+        pd.DataFrame(data_list).to_parquet(combined_results_path, index=False, engine="pyarrow")
+        logger.info("All model coefficients saved locally.")
+
+    elif execution_env == "gcp" and bucket_name:
+        # combine results from GCP bucket
+        client = storage.Client()
+        prefix = f"{train_folder}/"
+        blobs = client.list_blobs(bucket_name, prefix=prefix)
+        parameter_blobs = [blob for blob in blobs if blob.name.endswith(".json")]
+        if not parameter_blobs:
+            error = f"No individual training result files found in GCP bucket {bucket_name} with prefix {prefix} to combine."
+            logger.error(error)
+            raise FileNotFoundError(error)
+
+        buffer = io.BytesIO()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(f"{train_folder}/runner_parameters.parquet")
+        data_list = []
+        for blob in parameter_blobs:
+            content = blob.download_as_text()
+            data_list.append(json.loads(content))
+        pd.DataFrame(data_list).to_parquet(buffer, index=False, engine="pyarrow")
+        buffer.seek(0)
+        blob.upload_from_file(buffer, content_type="application/octet-stream")
+        logger.info("All model coefficients saved to GCP.")
+
+    else:
+        logger.warning("Cannot combine results in unknown environment. No results will be saved.")
 
 def finalize_runtime(logger_mgr: StrideSimLogger, logger: logging.Logger, execution_env: str, bucket_name: str | None) -> None:
     """Upload logs when needed and close the logger."""
@@ -121,6 +175,11 @@ if __name__ == "__main__":
     logger.info(f"Training a total of {training_limit} run(s) based on the latest retrieved data.")
     try:
         fit_latest_runs(logger, logger_mgr, execution_env, bucket_name or "", training_limit)
+        # combine all individual training results into one summary file for easier analysis
+        logger.info("Combining individual training results into one summary file...")
+        # combine the results in the respective environment
+        combine_training_results(logger, logger_mgr, execution_env)
+        logger.info("Results combined")
     finally:
         finalize_runtime(logger_mgr, logger, execution_env, bucket_name)
 

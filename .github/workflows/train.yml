@@ -2,6 +2,12 @@ name: Deploy Model Training on Cloud
 
 on:
   workflow_dispatch:
+    inputs:
+      num_runs:
+        description: 'Number of runs to execute'
+        required: true
+        default: 1
+        type: integer
 
 jobs:
   deploy:
@@ -45,6 +51,7 @@ jobs:
           env_vars: |
             BUCKET_NAME=${{ vars.GCP_BUCKET_NAME }}
             EXECUTION_ENV=gcp
+            NUM_RUNS=${{ inputs.num_runs }}
           flags: '--execute-now'
 
       # 5. Cleanup "Untagged" Images (The $0.00 bill insurance)
