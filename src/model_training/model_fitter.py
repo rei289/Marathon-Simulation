@@ -247,18 +247,18 @@ def model_fitting(logger: Logger, logger_mgr: StrideSimLogger, date: str) -> Non
     data["noise_cutoff_freq"] = cutoff_freq
     data["run_date"] = date
 
-    # save the model coefficients to a json file in the output folder
-    output_blob_path = f"{train_folder}/{date}/model_coefficients.json"
 
 
     if logger_mgr.execution_env == "local":
-        output_folder_path = Path(f"{bucket_name}/{train_folder}/{date}")
+        output_folder_path = Path(f"{bucket_name}/{train_folder}")
         output_folder_path.mkdir(parents=True, exist_ok=True)
-        file = output_folder_path / "model_coefficients.json"
+        file = output_folder_path / f"{date}.json"
         file.write_text(json.dumps(data, indent=4))
         logger.info(f"Model coefficients saved locally at: {file}")
 
     elif logger_mgr.execution_env == "gcp":
+        # save the model coefficients to a json file in the output folder
+        output_blob_path = f"{train_folder}/{date}.json"
         logger.info(f"Saving model coefficients to GCP: gs://{bucket_name}/{output_blob_path}")
         client = storage.Client()
         bucket = client.bucket(bucket_name)
